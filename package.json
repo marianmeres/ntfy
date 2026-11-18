@@ -1,6 +1,6 @@
 {
   "name": "@marianmeres/ntfy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "One function and one command (mmntfy) to publish an ntfy notification: the whole publish API, validated locally before anything is sent, never throws by default.",
   "license": "MIT",
   "author": "Marian Meres",
