@@ -4,10 +4,10 @@
 
 Two imports, the same on npm and JSR:
 
-| Import                   | Contains                                                     | Runs on                 |
-| ------------------------ | ------------------------------------------------------------ | ----------------------- |
-| `@marianmeres/ntfy`      | `ntfy`, `ntfySend`, `createNtfy`, builder, types, env reader | Node, Deno, the browser |
-| `@marianmeres/ntfy/sync` | `ntfySync`, `ntfySendSync`, `haveCurl` (blocking, via `curl`)  | Node, Deno              |
+| Import                   | Contains                                                      | Runs on                 |
+| ------------------------ | ------------------------------------------------------------- | ----------------------- |
+| `@marianmeres/ntfy`      | `ntfy`, `ntfySend`, `createNtfy`, builder, types, env reader  | Node, Deno, the browser |
+| `@marianmeres/ntfy/sync` | `ntfySync`, `ntfySendSync`, `haveCurl` (blocking, via `curl`) | Node, Deno              |
 
 The core needs nothing beyond web standards; `./sync` needs `node:child_process`, which is
 why it is a separate import. On JSR the `.` entry re-exports `./sync` too, and runs the CLI
@@ -345,21 +345,21 @@ interface NtfyRequest {
 type NtfyAction =
 	| { action: "view"; label: string; url: string; clear?: boolean }
 	| {
-		action: "http";
-		label: string;
-		url: string;
-		method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
-		headers?: Record<string, string>;
-		body?: string;
-		clear?: boolean;
-	}
+			action: "http";
+			label: string;
+			url: string;
+			method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+			headers?: Record<string, string>;
+			body?: string;
+			clear?: boolean;
+	  }
 	| {
-		action: "broadcast";
-		label: string;
-		intent?: string;
-		extras?: Record<string, string>;
-		clear?: boolean;
-	}
+			action: "broadcast";
+			label: string;
+			intent?: string;
+			extras?: Record<string, string>;
+			clear?: boolean;
+	  }
 	| { action: "copy"; label: string; value: string; clear?: boolean };
 ```
 

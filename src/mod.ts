@@ -18,8 +18,8 @@
  * @module
  */
 
-export * from "./types.ts";
-export * from "./target.ts";
-export * from "./request.ts";
-export * from "./ntfy.ts";
 export * from "./env.ts";
+export * from "./ntfy.ts";
+export * from "./request.ts";
+export * from "./target.ts";
+export * from "./types.ts";

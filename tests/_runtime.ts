@@ -45,7 +45,9 @@ export async function startAssertServer(expected: unknown): Promise<{
 			const match = buffered.match(/READY (\d+)/);
 			if (match) resolve(Number(match[1]));
 		});
-		child.once("exit", () => reject(new Error("assert-server exited before it was ready")));
+		child.once("exit", () =>
+			reject(new Error("assert-server exited before it was ready")),
+		);
 	});
 
 	return {

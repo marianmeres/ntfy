@@ -164,10 +164,9 @@ function validateActions(actions: NtfyAction[]): NtfyAction[] {
 				break;
 			default:
 				throw new NtfyConfigError(
-					`${at} has unknown type ${
-						JSON.stringify((action as NtfyAction).action)
-					} ` +
-						`(view, http, broadcast, copy)`,
+					`${at} has unknown type ${JSON.stringify(
+						(action as NtfyAction).action,
+					)} ` + `(view, http, broadcast, copy)`,
 				);
 		}
 	});
@@ -278,7 +277,8 @@ function normalize(o: NtfyOptions): Normalized {
 /** Which wire format this message needs, once `auto` is resolved. */
 export function resolveTransport(o: NtfyOptions): Exclude<NtfyTransport, "auto"> {
 	const wanted: NtfyTransport = o.transport ?? "auto";
-	const needsBody = !!o.attachment ||
+	const needsBody =
+		!!o.attachment ||
 		typeof o.actions === "string" ||
 		byteLength(o.message ?? "") > MESSAGE_SIZE_LIMIT;
 

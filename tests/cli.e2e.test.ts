@@ -16,7 +16,9 @@ import process from "node:process";
 import { after, before, test } from "node:test";
 import { path, runtimeArgv, startAssertServer } from "./_runtime.ts";
 
-const CLI_ARGV = runtimeArgv(path(process.env.CLI_RUNTIME === "deno" ? "../src/main.ts" : "../src/bin.ts"));
+const CLI_ARGV = runtimeArgv(
+	path(process.env.CLI_RUNTIME === "deno" ? "../src/main.ts" : "../src/bin.ts"),
+);
 
 /** The caller's environment minus any `NTFY_*`, so a developer's setup cannot leak in. */
 const BASE_ENV: Record<string, string | undefined> = Object.fromEntries(
@@ -74,10 +76,15 @@ test("--help prints usage, exit 0", async () => {
 });
 
 test("-n: the topic comes from the process environment, nothing is sent", async () => {
-	const r = await cli(["-n", "-t", "Deploy", "shipped"], { env: { NTFY_TOPIC: "alerts" } });
+	const r = await cli(["-n", "-t", "Deploy", "shipped"], {
+		env: { NTFY_TOPIC: "alerts" },
+	});
 	assert.equal(r.code, 0, r.stderr);
 	assert.equal(r.stderr, "");
-	assert.match(r.stdout, /^Would send \(nothing was sent\):\nPOST https:\/\/ntfy\.sh\/ {2}\[json\]/);
+	assert.match(
+		r.stdout,
+		/^Would send \(nothing was sent\):\nPOST https:\/\/ntfy\.sh\/ {2}\[json\]/,
+	);
 	assert.match(r.stdout, /"topic":"alerts","message":"shipped","title":"Deploy"/);
 });
 
@@ -90,7 +97,10 @@ test("--env-file: read (BOM, export, quotes, comments); the real environment win
 	try {
 		const fromFile = await cli(["-n", "--env-file", file, "hi"]);
 		assert.equal(fromFile.code, 0, fromFile.stderr);
-		assert.match(fromFile.stdout, /"topic":"from-file","message":"hi","title":"From file"/);
+		assert.match(
+			fromFile.stdout,
+			/"topic":"from-file","message":"hi","title":"From file"/,
+		);
 		assert.match(fromFile.stdout, /Authorization: Bearer …\(redacted\)/);
 
 		const fromProcess = await cli(["-n", "--env-file", file, "hi"], {
@@ -103,7 +113,9 @@ test("--env-file: read (BOM, export, quotes, comments); the real environment win
 });
 
 test("a missing --env-file is a refusal that names the file", async () => {
-	const r = await cli(["-n", "--env-file", "nope.env", "hi"], { env: { NTFY_TOPIC: "alerts" } });
+	const r = await cli(["-n", "--env-file", "nope.env", "hi"], {
+		env: { NTFY_TOPIC: "alerts" },
+	});
 	// Node scans the *script's* arguments for `--env-file` too, and exits 9 with
 	// "node: nope.env: not found" before the CLI runs (seen on 26.13). It never loads such a
 	// file, so an existing one is harmless; only the exit code of a missing one differs from
@@ -114,14 +126,19 @@ test("a missing --env-file is a refusal that names the file", async () => {
 });
 
 test("piped stdin is the message; a trailing newline is not", async () => {
-	const r = await cli(["-n"], { env: { NTFY_TOPIC: "alerts" }, input: "line one\nline two\n" });
+	const r = await cli(["-n"], {
+		env: { NTFY_TOPIC: "alerts" },
+		input: "line one\nline two\n",
+	});
 	assert.equal(r.code, 0, r.stderr);
 	assert.match(r.stdout, /"message":"line one\\nline two"\}/);
 });
 
 test("-f reads the file and names the attachment after it", async () => {
 	await writeFile(join(cwd, "shot.png"), new Uint8Array([1, 2, 3]));
-	const r = await cli(["-n", "-f", "shot.png", "look"], { env: { NTFY_TOPIC: "alerts" } });
+	const r = await cli(["-n", "-f", "shot.png", "look"], {
+		env: { NTFY_TOPIC: "alerts" },
+	});
 	assert.equal(r.code, 0, r.stderr);
 	assert.match(r.stdout, /^PUT https:\/\/ntfy\.sh\/alerts {2}\[body\]$/m);
 	assert.match(r.stdout, /^ {2}X-Filename: shot\.png$/m);
@@ -144,9 +161,12 @@ test("a real send through the global fetch: exit 0, and the process ends promptl
 		body: JSON.stringify({ topic: "alerts", message: "hello", title: "Ahoj" }),
 	});
 	try {
-		const r = await cli(["-T", `http://127.0.0.1:${server.port}/alerts`, "-t", "Ahoj", "hello"], {
-			env: { NTFY_TOKEN: "tk_e2e" },
-		});
+		const r = await cli(
+			["-T", `http://127.0.0.1:${server.port}/alerts`, "-t", "Ahoj", "hello"],
+			{
+				env: { NTFY_TOKEN: "tk_e2e" },
+			},
+		);
 		assert.equal(r.code, 0, r.stderr);
 		assert.equal(r.stdout, `sent to http://127.0.0.1:${server.port}/ (id sync123)\n`);
 		// `process.exitCode`, not `exit()`: nothing — a keep-alive socket, the timeout timer —
@@ -163,7 +183,10 @@ test("a send the server refuses exits 1 and says why", async () => {
 		const r = await cli(["-T", `http://127.0.0.1:${server.port}/alerts`, "hello"]);
 		assert.equal(r.code, 1);
 		assert.equal(r.stdout, "");
-		assert.match(r.stderr, /^mmntfy: HTTP 400 — path: want \/never-matches, got \/ \(code 40001\)$/m);
+		assert.match(
+			r.stderr,
+			/^mmntfy: HTTP 400 — path: want \/never-matches, got \/ \(code 40001\)$/m,
+		);
 	} finally {
 		await server.stop();
 	}

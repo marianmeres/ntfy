@@ -46,7 +46,9 @@ const server = createServer(async (request, response) => {
 	response.setHeader("content-type", "application/json");
 	if (problems.length) {
 		response.statusCode = 400;
-		response.end(JSON.stringify({ code: 40001, http: 400, error: problems.join(" · ") }));
+		response.end(
+			JSON.stringify({ code: 40001, http: 400, error: problems.join(" · ") }),
+		);
 		return;
 	}
 	response.statusCode = 200;

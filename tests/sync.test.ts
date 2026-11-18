@@ -5,13 +5,15 @@ import { startAssertServer as startServer } from "./_runtime.ts";
 
 const curl = haveCurl();
 
-test("ntfySync sends a well-formed request, blocking, through curl", { skip: !curl }, async () => {
+test("ntfySync sends a well-formed request, blocking, through curl", {
+	skip: !curl,
+}, async () => {
 	const { port, stop } = await startServer({
 		method: "POST",
 		path: "/",
 		headers: {
 			"Content-Type": "application/json",
-			"Authorization": "Bearer tk_test",
+			Authorization: "Bearer tk_test",
 		},
 		body: JSON.stringify({ topic: "alerts", message: "hello", title: "Ahoj" }),
 	});
@@ -31,7 +33,9 @@ test("ntfySync sends a well-formed request, blocking, through curl", { skip: !cu
 	}
 });
 
-test("ntfySync reports the server's own refusal rather than claiming success", { skip: !curl }, async () => {
+test("ntfySync reports the server's own refusal rather than claiming success", {
+	skip: !curl,
+}, async () => {
 	const { port, stop } = await startServer({ path: "/never-matches" });
 	try {
 		const result = ntfySendSync({

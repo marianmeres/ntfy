@@ -102,9 +102,9 @@ export function optionsFromEnv(env: EnvGetter): NtfyOptions {
 		const ms = Number(timeout);
 		if (!Number.isFinite(ms) || ms < 0) {
 			throw new NtfyConfigError(
-				`NTFY_TIMEOUT must be a number of milliseconds, got ${
-					JSON.stringify(timeout)
-				}`,
+				`NTFY_TIMEOUT must be a number of milliseconds, got ${JSON.stringify(
+					timeout,
+				)}`,
 			);
 		}
 		o.timeout = ms;

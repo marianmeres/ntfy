@@ -44,12 +44,13 @@ function abortController(o: NtfyOptions): {
 	const timeout = o.timeout ?? DEFAULT_TIMEOUT;
 	let timedOut = false;
 
-	const timer = timeout > 0
-		? setTimeout(() => {
-			timedOut = true;
-			controller.abort();
-		}, timeout)
-		: undefined;
+	const timer =
+		timeout > 0
+			? setTimeout(() => {
+					timedOut = true;
+					controller.abort();
+				}, timeout)
+			: undefined;
 
 	const onAbort = () => controller.abort();
 	if (o.signal) {
@@ -67,7 +68,11 @@ function abortController(o: NtfyOptions): {
 }
 
 /** ntfy answers a refusal with `{"code":…,"http":…,"error":…,"link":…}`. */
-function describeFailure(status: number, statusText: string, body: string): {
+function describeFailure(
+	status: number,
+	statusText: string,
+	body: string,
+): {
 	error: string;
 	errorCode?: number;
 } {
@@ -151,8 +156,8 @@ export async function ntfySend(options: NtfyOptions | string): Promise<NtfyResul
 		const reason = timedOut()
 			? `timed out after ${o.timeout ?? DEFAULT_TIMEOUT}ms`
 			: e instanceof Error
-			? e.message
-			: String(e);
+				? e.message
+				: String(e);
 		const error = `could not reach ${request.url} — ${reason}`;
 		if (o.throwOnError) {
 			throw new NtfyError(error, { url: request.url, cause: e });

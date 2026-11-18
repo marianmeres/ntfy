@@ -17,7 +17,11 @@ test("bare topic honours an explicit server", () => {
 
 test("host/topic is a target, not a topic", () => {
 	const t = resolveTarget({ topic: "ntfy.example.com/alerts" });
-	assert.deepEqual(t, { base: "https://ntfy.example.com", topic: "alerts", search: "" });
+	assert.deepEqual(t, {
+		base: "https://ntfy.example.com",
+		topic: "alerts",
+		search: "",
+	});
 });
 
 test("a full URL in `topic` overrides `server`", () => {
@@ -63,8 +67,14 @@ test("trailing slashes do not create an empty topic", () => {
 });
 
 test("no topic at all is a refusal", () => {
-	assert.throws(() => resolveTarget({}), { name: "NtfyConfigError", message: /no topic/ });
-	assert.throws(() => resolveTarget({ server: "https://ntfy.sh" }), { name: "NtfyConfigError", message: /no topic/ });
+	assert.throws(() => resolveTarget({}), {
+		name: "NtfyConfigError",
+		message: /no topic/,
+	});
+	assert.throws(() => resolveTarget({ server: "https://ntfy.sh" }), {
+		name: "NtfyConfigError",
+		message: /no topic/,
+	});
 });
 
 test("an invalid topic is a refusal, not a guess", () => {

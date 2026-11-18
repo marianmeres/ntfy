@@ -86,9 +86,14 @@ function checkBrowserSafe(entry: string): number {
 		if (seen.has(file)) return;
 		seen.add(file);
 		const source = readFileSync(file, "utf8");
-		for (const [, spec] of source.matchAll(/(?:import|export)[^"']*?from\s*["']([^"']+)["']/g)) {
+		for (const [, spec] of source.matchAll(
+			/(?:import|export)[^"']*?from\s*["']([^"']+)["']/g,
+		)) {
 			check(spec, `unparsable import in ${file}`);
-			check(!spec.startsWith("node:"), `${file} imports ${spec}: the core must stay browser-safe`);
+			check(
+				!spec.startsWith("node:"),
+				`${file} imports ${spec}: the core must stay browser-safe`,
+			);
 			if (spec.startsWith(".")) visit(resolve(dirname(file), spec));
 		}
 	};
@@ -185,8 +190,9 @@ try {
 	);
 	const dry = run(bin, ["-n", "-T", "alerts", "hi"], project, env);
 	check(
-		dry.startsWith("Would send (nothing was sent):\nPOST https://ntfy.sh/  [json]\n") &&
-			dry.includes(`{"topic":"alerts","message":"hi"}`),
+		dry.startsWith(
+			"Would send (nothing was sent):\nPOST https://ntfy.sh/  [json]\n",
+		) && dry.includes(`{"topic":"alerts","message":"hi"}`),
 		`--dry-run printed ${JSON.stringify(dry)}`,
 	);
 	console.log("smoke: the bin runs from dist/ (--version, --dry-run)");

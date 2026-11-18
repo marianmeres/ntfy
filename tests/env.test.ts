@@ -11,17 +11,19 @@ test("an empty environment produces empty options, not blanks", () => {
 });
 
 test("every documented variable is read", () => {
-	const options = optionsFromEnv(env({
-		NTFY_TOPIC: "alerts",
-		NTFY_SERVER: "https://ntfy.example.com",
-		NTFY_TOKEN: "tk_x",
-		NTFY_PRIORITY: "high",
-		NTFY_TAGS: "robot,warning",
-		NTFY_TITLE: "cron",
-		NTFY_ICON: "https://example.com/i.png",
-		NTFY_CLICK: "https://example.com",
-		NTFY_TIMEOUT: "2500",
-	}));
+	const options = optionsFromEnv(
+		env({
+			NTFY_TOPIC: "alerts",
+			NTFY_SERVER: "https://ntfy.example.com",
+			NTFY_TOKEN: "tk_x",
+			NTFY_PRIORITY: "high",
+			NTFY_TAGS: "robot,warning",
+			NTFY_TITLE: "cron",
+			NTFY_ICON: "https://example.com/i.png",
+			NTFY_CLICK: "https://example.com",
+			NTFY_TIMEOUT: "2500",
+		}),
+	);
 	assert.deepEqual(options, {
 		topic: "alerts",
 		server: "https://ntfy.example.com",
@@ -49,11 +51,20 @@ test("a numeric priority is read as a number", () => {
 });
 
 test("an unusable variable is a refusal at startup, not a surprise at 4am", () => {
-	assert.throws(() => optionsFromEnv(env({ NTFY_PRIORITY: "loud" })), { name: "NtfyConfigError", message: /NTFY_PRIORITY/ });
-	assert.throws(() => optionsFromEnv(env({ NTFY_TIMEOUT: "soon" })), { name: "NtfyConfigError", message: /NTFY_TIMEOUT/ });
+	assert.throws(() => optionsFromEnv(env({ NTFY_PRIORITY: "loud" })), {
+		name: "NtfyConfigError",
+		message: /NTFY_PRIORITY/,
+	});
+	assert.throws(() => optionsFromEnv(env({ NTFY_TIMEOUT: "soon" })), {
+		name: "NtfyConfigError",
+		message: /NTFY_TIMEOUT/,
+	});
 });
 
 test("ENV_VARS lists exactly what is read", () => {
 	assert.deepEqual(ENV_VARS.length, 11);
-	assert.deepEqual(ENV_VARS.every((v) => v.startsWith("NTFY_")), true);
+	assert.deepEqual(
+		ENV_VARS.every((v) => v.startsWith("NTFY_")),
+		true,
+	);
 });

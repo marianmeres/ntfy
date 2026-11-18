@@ -4,11 +4,11 @@ import {
 	buildNtfyRequest,
 	encodeHeaderValue,
 	MESSAGE_SIZE_LIMIT,
+	type NtfyAction,
+	NtfyConfigError,
 	normalizeDelay,
 	normalizePriority,
 	normalizeTags,
-	type NtfyAction,
-	NtfyConfigError,
 	resolveTransport,
 } from "../src/mod.ts";
 
@@ -94,14 +94,20 @@ test("priority accepts numbers and names, and refuses the rest", () => {
 test("tags accept an array or a comma-separated string", () => {
 	assert.deepEqual(normalizeTags("a, b ,,c"), ["a", "b", "c"]);
 	assert.deepEqual(normalizeTags([" a ", ""]), ["a"]);
-	assert.throws(() => normalizeTags(["x".repeat(513)]), { name: "NtfyConfigError", message: /512/ });
+	assert.throws(() => normalizeTags(["x".repeat(513)]), {
+		name: "NtfyConfigError",
+		message: /512/,
+	});
 });
 
 test("delay: a Date becomes unix seconds, milliseconds are refused", () => {
 	assert.deepEqual(normalizeDelay(new Date(1_700_000_000_000)), "1700000000");
 	assert.deepEqual(normalizeDelay(1_700_000_000), "1700000000");
 	assert.deepEqual(normalizeDelay("tomorrow, 3pm"), "tomorrow, 3pm");
-	assert.throws(() => normalizeDelay(Date.now()), { name: "NtfyConfigError", message: /milliseconds/ });
+	assert.throws(() => normalizeDelay(Date.now()), {
+		name: "NtfyConfigError",
+		message: /milliseconds/,
+	});
 });
 
 test("a token becomes a Bearer header, a user/password pair becomes Basic", () => {
@@ -110,8 +116,9 @@ test("a token becomes a Bearer header, a user/password pair becomes Basic", () =
 		"Bearer tk_x",
 	);
 	assert.deepEqual(
-		buildNtfyRequest({ topic: "t", username: "u", password: "p" })
-			.headers["Authorization"],
+		buildNtfyRequest({ topic: "t", username: "u", password: "p" }).headers[
+			"Authorization"
+		],
 		`Basic ${btoa("u:p")}`,
 	);
 });
@@ -123,8 +130,14 @@ test("basic auth survives a non-ASCII password", () => {
 });
 
 test("auth that cannot be resolved is refused", () => {
-	assert.throws(() => buildNtfyRequest({ topic: "t", token: "a", username: "u", password: "p" }), { name: "NtfyConfigError", message: /not both/ });
-	assert.throws(() => buildNtfyRequest({ topic: "t", username: "u" }), { name: "NtfyConfigError", message: /both/ });
+	assert.throws(
+		() => buildNtfyRequest({ topic: "t", token: "a", username: "u", password: "p" }),
+		{ name: "NtfyConfigError", message: /not both/ },
+	);
+	assert.throws(() => buildNtfyRequest({ topic: "t", username: "u" }), {
+		name: "NtfyConfigError",
+		message: /both/,
+	});
 });
 
 test("an uploaded file switches to the body transport and PUTs the bytes", () => {
@@ -171,31 +184,43 @@ test("a non-ASCII title is RFC 2047 encoded for the header transport", () => {
 test("a message over ntfy's text limit switches to the body transport", () => {
 	const long = "x".repeat(MESSAGE_SIZE_LIMIT + 1);
 	assert.deepEqual(resolveTransport({ message: long }), "body");
-	assert.deepEqual(resolveTransport({ message: "x".repeat(MESSAGE_SIZE_LIMIT) }), "json");
+	assert.deepEqual(
+		resolveTransport({ message: "x".repeat(MESSAGE_SIZE_LIMIT) }),
+		"json",
+	);
 	const r = buildNtfyRequest({ topic: "alerts", message: long });
 	assert.deepEqual(r.transport, "body");
 	assert.deepEqual(r.body, long);
 });
 
 test("transport: json refuses what it cannot carry, saying why", () => {
-	assert.throws(() =>
+	assert.throws(
+		() =>
 			buildNtfyRequest({
 				topic: "t",
 				transport: "json",
 				attachment: new Uint8Array([1]),
-			}), { name: "NtfyConfigError", message: /body transport/ });
-	assert.throws(() =>
+			}),
+		{ name: "NtfyConfigError", message: /body transport/ },
+	);
+	assert.throws(
+		() =>
 			buildNtfyRequest({
 				topic: "t",
 				transport: "json",
 				actions: "view, Open, https://x",
-			}), { name: "NtfyConfigError", message: /short-format/ });
-	assert.throws(() =>
+			}),
+		{ name: "NtfyConfigError", message: /short-format/ },
+	);
+	assert.throws(
+		() =>
 			buildNtfyRequest({
 				topic: "t",
 				transport: "json",
 				message: "x".repeat(MESSAGE_SIZE_LIMIT + 1),
-			}), { name: "NtfyConfigError", message: /byte limit/ });
+			}),
+		{ name: "NtfyConfigError", message: /byte limit/ },
+	);
 });
 
 test("short-format actions are passed to the server verbatim", () => {
@@ -222,34 +247,64 @@ test("structured actions are JSON in the body transport too", () => {
 
 test("actions are validated before anything is spent", () => {
 	const view = { action: "view", label: "x", url: "https://x" } as const;
-	assert.throws(() => buildNtfyRequest({ topic: "t", actions: [view, view, view, view] }), { name: "NtfyConfigError", message: /at most 3/ });
-	assert.throws(() =>
+	assert.throws(
+		() => buildNtfyRequest({ topic: "t", actions: [view, view, view, view] }),
+		{ name: "NtfyConfigError", message: /at most 3/ },
+	);
+	assert.throws(
+		() =>
 			buildNtfyRequest({
 				topic: "t",
 				actions: [{ action: "view", label: "", url: "u" }],
-			}), { name: "NtfyConfigError", message: /no label/ });
-	assert.throws(() =>
+			}),
+		{ name: "NtfyConfigError", message: /no label/ },
+	);
+	assert.throws(
+		() =>
 			buildNtfyRequest({
 				topic: "t",
 				actions: [{ action: "view", label: "l", url: "" }],
-			}), { name: "NtfyConfigError", message: /no url/ });
-	assert.throws(() =>
+			}),
+		{ name: "NtfyConfigError", message: /no url/ },
+	);
+	assert.throws(
+		() =>
 			buildNtfyRequest({
 				topic: "t",
 				actions: [{ action: "nope", label: "l" } as unknown as NtfyAction],
-			}), { name: "NtfyConfigError", message: /unknown type/ });
+			}),
+		{ name: "NtfyConfigError", message: /unknown type/ },
+	);
 });
 
 test("combinations ntfy rejects are rejected here, before the round trip", () => {
-	assert.throws(() => buildNtfyRequest({ topic: "t", delay: "30m", cache: false }), { name: "NtfyConfigError", message: /cache/ });
-	assert.throws(() => buildNtfyRequest({ topic: "t", delay: "30m", email: "a@b.c" }), { name: "NtfyConfigError", message: /e-mail/ });
-	assert.throws(() => buildNtfyRequest({ topic: "t", delay: "30m", call: "yes" }), { name: "NtfyConfigError", message: /phone call/ });
+	assert.throws(() => buildNtfyRequest({ topic: "t", delay: "30m", cache: false }), {
+		name: "NtfyConfigError",
+		message: /cache/,
+	});
+	assert.throws(() => buildNtfyRequest({ topic: "t", delay: "30m", email: "a@b.c" }), {
+		name: "NtfyConfigError",
+		message: /e-mail/,
+	});
+	assert.throws(() => buildNtfyRequest({ topic: "t", delay: "30m", call: "yes" }), {
+		name: "NtfyConfigError",
+		message: /phone call/,
+	});
 });
 
 test("icon and attach must be http(s) URLs; a title has a size limit", () => {
-	assert.throws(() => buildNtfyRequest({ topic: "t", icon: "file:///tmp/x.png" }), { name: "NtfyConfigError", message: /http\(s\)/ });
-	assert.throws(() => buildNtfyRequest({ topic: "t", attach: "not a url" }), { name: "NtfyConfigError", message: /http\(s\)/ });
-	assert.throws(() => buildNtfyRequest({ topic: "t", title: "x".repeat(1025) }), { name: "NtfyConfigError", message: /1024/ });
+	assert.throws(() => buildNtfyRequest({ topic: "t", icon: "file:///tmp/x.png" }), {
+		name: "NtfyConfigError",
+		message: /http\(s\)/,
+	});
+	assert.throws(() => buildNtfyRequest({ topic: "t", attach: "not a url" }), {
+		name: "NtfyConfigError",
+		message: /http\(s\)/,
+	});
+	assert.throws(() => buildNtfyRequest({ topic: "t", title: "x".repeat(1025) }), {
+		name: "NtfyConfigError",
+		message: /1024/,
+	});
 });
 
 test("extra headers are merged last", () => {
@@ -265,11 +320,14 @@ test("extra headers are merged last", () => {
 });
 
 test("a missing topic is reported as a topic problem", () => {
-	assert.throws(() => buildNtfyRequest({ message: "hi" }), (e) => {
-		assert.ok(e instanceof NtfyConfigError);
-		assert.match(String(e), /NTFY_TOPIC/);
-		return true;
-	});
+	assert.throws(
+		() => buildNtfyRequest({ message: "hi" }),
+		(e) => {
+			assert.ok(e instanceof NtfyConfigError);
+			assert.match(String(e), /NTFY_TOPIC/);
+			return true;
+		},
+	);
 });
 
 test("a small upload gets a filename so ntfy reads it as an attachment, not as text", () => {

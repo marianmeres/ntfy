@@ -99,28 +99,31 @@ test("flags override the environment", async () => {
 
 test("every message flag reaches the payload", async () => {
 	const h = harness({ env: TOPIC_ENV });
-	await runCli([
-		"-t",
-		"Deploy",
-		"-p",
-		"high",
-		"--tags",
-		"rocket,white_check_mark",
-		"-c",
-		"https://example.com",
-		"-m",
-		"--icon",
-		"https://example.com/i.png",
-		"--attach",
-		"https://example.com/f.jpg",
-		"--filename",
-		"f.jpg",
-		"-d",
-		"30m",
-		"--sequence-id",
-		"seq-1",
-		"shipped v1.2.3",
-	], h.io);
+	await runCli(
+		[
+			"-t",
+			"Deploy",
+			"-p",
+			"high",
+			"--tags",
+			"rocket,white_check_mark",
+			"-c",
+			"https://example.com",
+			"-m",
+			"--icon",
+			"https://example.com/i.png",
+			"--attach",
+			"https://example.com/f.jpg",
+			"--filename",
+			"f.jpg",
+			"-d",
+			"30m",
+			"--sequence-id",
+			"seq-1",
+			"shipped v1.2.3",
+		],
+		h.io,
+	);
 	assert.deepEqual(h.body(), {
 		topic: "alerts",
 		message: "shipped v1.2.3",
@@ -163,13 +166,16 @@ test("-k becomes a Bearer token, -u becomes basic auth", async () => {
 
 test("repeated --action flags become one short-format string on the body transport", async () => {
 	const h = harness({ env: TOPIC_ENV });
-	await runCli([
-		"-a",
-		"view, Logs, https://ci.example.com/logs",
-		"-a",
-		"http, Retry, https://ci.example.com/retry, method=POST",
-		"build failed",
-	], h.io);
+	await runCli(
+		[
+			"-a",
+			"view, Logs, https://ci.example.com/logs",
+			"-a",
+			"http, Retry, https://ci.example.com/retry, method=POST",
+			"build failed",
+		],
+		h.io,
+	);
 	assert.deepEqual(h.calls[0]!.url, "https://ntfy.sh/alerts");
 	assert.deepEqual(String(h.calls[0]!.init.body), "build failed");
 	assert.deepEqual(
@@ -303,7 +309,12 @@ test("a value that starts with a dash has to be spelled with =", async () => {
 test("short flags combine, and a short option takes an attached value", async () => {
 	const h = harness({ env: TOPIC_ENV });
 	assert.deepEqual(await runCli(["-mq", "-p4", "hi"], h.io), 0);
-	assert.deepEqual(h.body(), { topic: "alerts", message: "hi", priority: 4, markdown: true });
+	assert.deepEqual(h.body(), {
+		topic: "alerts",
+		message: "hi",
+		priority: 4,
+		markdown: true,
+	});
 	assert.deepEqual(h.out, []);
 });
 
@@ -353,7 +364,10 @@ test("a missing --env-file is a named refusal, not a confusing 'no topic'", asyn
 	const h = harness({ env: TOPIC_ENV });
 	// The default reader is used here on purpose: the check lives in it.
 	delete (h.io as { readEnvFile?: unknown }).readEnvFile;
-	assert.deepEqual(await runCli(["--env-file", "/nope/does/not/exist.env", "hi"], h.io), 2);
+	assert.deepEqual(
+		await runCli(["--env-file", "/nope/does/not/exist.env", "hi"], h.io),
+		2,
+	);
 	assert.match(h.err.join("\n"), /--env-file/);
 	assert.deepEqual(h.calls.length, 0);
 });

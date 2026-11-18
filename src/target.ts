@@ -95,9 +95,7 @@ function parseTarget(raw: string): NtfyTarget {
 	const segments = trimSlashes(u.pathname).split("/").filter(Boolean);
 	const topic = segments.pop() ?? "";
 	if (!topic) {
-		throw new NtfyConfigError(
-			`names a server but no topic: ${JSON.stringify(raw)}`,
-		);
+		throw new NtfyConfigError(`names a server but no topic: ${JSON.stringify(raw)}`);
 	}
 	if (!TOPIC_REGEX.test(topic)) {
 		throw new NtfyConfigError(

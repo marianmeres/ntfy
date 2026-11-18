@@ -147,13 +147,11 @@ function redactHeaders(headers: Record<string, string>): Record<string, string> 
 	const out: Record<string, string> = {};
 	for (const [name, value] of Object.entries(headers)) {
 		out[name] = /^authorization$/i.test(name)
-			? value.replace(
-				/\S+$/,
-				(secret) =>
+			? value.replace(/\S+$/, (secret) =>
 					secret.length > 8
 						? `${secret.slice(0, 6)}…(redacted)`
 						: "…(redacted)",
-			)
+				)
 			: value;
 	}
 	return out;
@@ -173,9 +171,10 @@ function describeRequest(request: NtfyRequest): string[] {
 	if (typeof request.body === "string") {
 		lines.push("", request.body);
 	} else if (request.body) {
-		const size = request.body instanceof Blob
-			? request.body.size
-			: (request.body as Uint8Array | ArrayBuffer).byteLength;
+		const size =
+			request.body instanceof Blob
+				? request.body.size
+				: (request.body as Uint8Array | ArrayBuffer).byteLength;
 		lines.push("", `<${size} bytes of attachment>`);
 	}
 	return lines;

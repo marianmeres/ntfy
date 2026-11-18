@@ -3,10 +3,10 @@ import { test } from "node:test";
 import {
 	createNtfy,
 	createNtfySend,
-	ntfy,
 	NtfyConfigError,
 	NtfyError,
 	type NtfyOptions,
+	ntfy,
 	ntfySend,
 } from "../src/mod.ts";
 
@@ -54,15 +54,18 @@ test("a successful send reports ok and the server's echo", async () => {
 
 test("ntfy() is the same thing, reduced to a boolean", async () => {
 	const { fetch } = recordingFetch(() => published());
-	assert.deepEqual(await ntfy({ ...quiet, topic: "alerts", message: "hi", fetch }), true);
+	assert.deepEqual(
+		await ntfy({ ...quiet, topic: "alerts", message: "hi", fetch }),
+		true,
+	);
 });
 
 test("a refusal is reported with ntfy's own reason and code", async () => {
-	const { fetch } = recordingFetch(() =>
-		new Response(
-			JSON.stringify({ code: 40301, http: 403, error: "forbidden" }),
-			{ status: 403 },
-		)
+	const { fetch } = recordingFetch(
+		() =>
+			new Response(JSON.stringify({ code: 40301, http: 403, error: "forbidden" }), {
+				status: 403,
+			}),
 	);
 	const result = await ntfySend({ ...quiet, topic: "alerts", fetch });
 
@@ -75,8 +78,8 @@ test("a refusal is reported with ntfy's own reason and code", async () => {
 });
 
 test("a non-JSON error body is still reported, not swallowed", async () => {
-	const { fetch } = recordingFetch(() =>
-		new Response("<html>502 Bad Gateway</html>", { status: 502 })
+	const { fetch } = recordingFetch(
+		() => new Response("<html>502 Bad Gateway</html>", { status: 502 }),
 	);
 	const result = await ntfySend({ ...quiet, topic: "alerts", fetch });
 	assert.deepEqual(result.ok, false);
@@ -95,8 +98,11 @@ test("a network failure is a failure, not a throw", async () => {
 });
 
 test("throwOnError turns a refusal into an NtfyError carrying the status", async () => {
-	const { fetch } = recordingFetch(() =>
-		new Response(JSON.stringify({ code: 40301, error: "forbidden" }), { status: 403 })
+	const { fetch } = recordingFetch(
+		() =>
+			new Response(JSON.stringify({ code: 40301, error: "forbidden" }), {
+				status: 403,
+			}),
 	);
 	await assert.rejects(
 		() => ntfySend({ ...quiet, topic: "alerts", fetch, throwOnError: true }),
@@ -116,14 +122,16 @@ test("a config error is returned by default and thrown on request", async () => 
 	assert.deepEqual(result.status, 0);
 	assert.match(result.error!, /no topic/);
 
-	await assert.rejects(() => ntfySend({ ...quiet, message: "no topic here", throwOnError: true }), NtfyConfigError);
+	await assert.rejects(
+		() => ntfySend({ ...quiet, message: "no topic here", throwOnError: true }),
+		NtfyConfigError,
+	);
 });
 
 test("a failure is logged, so silence never means success by accident", async () => {
 	const warnings: string[] = [];
-	const fetch =
-		(() =>
-			Promise.reject(new Error("offline"))) as unknown as typeof globalThis.fetch;
+	const fetch = (() =>
+		Promise.reject(new Error("offline"))) as unknown as typeof globalThis.fetch;
 	await ntfySend({
 		topic: "alerts",
 		fetch,
@@ -134,14 +142,10 @@ test("a failure is logged, so silence never means success by accident", async ()
 });
 
 test("a timeout aborts the request and says so", async () => {
-	const fetch =
-		((_url: string, init?: RequestInit) =>
-			new Promise((_resolve, reject) => {
-				init?.signal?.addEventListener(
-					"abort",
-					() => reject(new Error("aborted")),
-				);
-			})) as unknown as typeof globalThis.fetch;
+	const fetch = ((_url: string, init?: RequestInit) =>
+		new Promise((_resolve, reject) => {
+			init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+		})) as unknown as typeof globalThis.fetch;
 
 	const result = await ntfySend({ ...quiet, topic: "alerts", fetch, timeout: 20 });
 	assert.deepEqual(result.ok, false);
@@ -150,14 +154,10 @@ test("a timeout aborts the request and says so", async () => {
 
 test("a caller's abort signal is honoured alongside the timeout", async () => {
 	const controller = new AbortController();
-	const fetch =
-		((_url: string, init?: RequestInit) =>
-			new Promise((_resolve, reject) => {
-				init?.signal?.addEventListener(
-					"abort",
-					() => reject(new Error("aborted")),
-				);
-			})) as unknown as typeof globalThis.fetch;
+	const fetch = ((_url: string, init?: RequestInit) =>
+		new Promise((_resolve, reject) => {
+			init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+		})) as unknown as typeof globalThis.fetch;
 
 	const pending = ntfySend({
 		...quiet,
