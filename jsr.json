@@ -1,0 +1,14 @@
+{
+  "name": "@marianmeres/ntfy",
+  "exports": {
+    ".": "./src/main.ts",
+    "./sync": "./src/sync.ts"
+  },
+  "imports": {
+    "@marianmeres/clog": "jsr:@marianmeres/clog@^3.21.0"
+  },
+  "publish": {
+    "include": ["src/**/*.ts", "README.md", "API.md", "AGENTS.md", "LICENSE"],
+    "exclude": ["src/bin.ts"]
+  }
+}

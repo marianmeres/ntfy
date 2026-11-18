@@ -2,15 +2,17 @@
 
 `@marianmeres/ntfy` publishes to [ntfy](https://ntfy.sh). It does not subscribe.
 
-Two entry points:
+Two imports, the same on npm and JSR:
 
-| Entry         | Contains                                                      | Available on |
-| ------------- | ------------------------------------------------------------- | ------------ |
-| `src/mod.ts`  | `ntfy`, `ntfySend`, `createNtfy`, builder, types, env reader  | JSR + npm    |
-| `src/main.ts` | all of the above **plus** `ntfySync`, `ntfySendSync`, the CLI | JSR only     |
+| Import                   | Contains                                                     | Runs on                 |
+| ------------------------ | ------------------------------------------------------------ | ----------------------- |
+| `@marianmeres/ntfy`      | `ntfy`, `ntfySend`, `createNtfy`, builder, types, env reader | Node, Deno, the browser |
+| `@marianmeres/ntfy/sync` | `ntfySync`, `ntfySendSync`, `haveCurl` (blocking, via `curl`)  | Node, Deno              |
 
-`deno add jsr:@marianmeres/ntfy` gives you `main.ts`; `npm install @marianmeres/ntfy`
-gives you `mod.ts` (the pieces that need `Deno.Command` or `@std/*` are not in it).
+The core needs nothing beyond web standards; `./sync` needs `node:child_process`, which is
+why it is a separate import. On JSR the `.` entry re-exports `./sync` too, and runs the CLI
+when executed directly (`deno run -A jsr:@marianmeres/ntfy`). On npm the CLI is the
+`mmntfy` bin.
 
 ---
 
@@ -91,36 +93,36 @@ As `createNtfy`, returning the full `NtfyResult`.
 
 ---
 
-### `ntfySync(options)` — Deno only
+### `ntfySync(options)` — `@marianmeres/ntfy/sync`
 
 Send one message, **blocking** until it is delivered or has failed, by shelling out to
 `curl`. Returns `true` if curl was happy.
 
-This exists for the places `fetch` cannot reach: a synchronous `Deno.exit()`, an
-`unload` listener, a signal handler's shutdown deadline. The event loop does not turn
+This exists for the places `fetch` cannot reach: a synchronous `process.exit()`, an
+`exit` listener, a signal handler's shutdown deadline. The event loop does not turn
 while it runs — which is the point.
 
-**Requires:** `curl` on `PATH` and the `--allow-run=curl` permission. Uploading a file
-is not supported here; use `ntfySend`.
+**Requires:** `curl` on `PATH` (on Deno, also the `--allow-run=curl` permission).
+Uploading a file is not supported here; use `ntfySend`.
 
 **Returns:** `boolean`
 
 **Example:**
 
 ```typescript
-globalThis.addEventListener("unload", () => {
+import { ntfySync } from "@marianmeres/ntfy/sync";
+
+process.on("exit", () => {
 	ntfySync({ topic: "alerts", message: "process exited", priority: 4 });
 });
 ```
 
 > The token is passed as a curl argument, so it is visible in the process table for
-> the life of the request. curl can only be kept from that by a config file or stdin,
-> and stdin is what a synchronous subprocess cannot have. Give the sender a
-> publish-only token.
+> the life of the request. Give the sender a publish-only token.
 
 ---
 
-### `ntfySendSync(options)` — Deno only
+### `ntfySendSync(options)` — `@marianmeres/ntfy/sync`
 
 `ntfySync`, reporting the full `NtfyResult`.
 
@@ -128,7 +130,7 @@ globalThis.addEventListener("unload", () => {
 
 ---
 
-### `haveCurl()` — Deno only
+### `haveCurl()` — `@marianmeres/ntfy/sync`
 
 Is `curl` on `PATH`? Ask once, at startup, so a program configured to notify can
 refuse to start rather than fail silently later.
@@ -167,8 +169,8 @@ Read `NTFY_*` into options. Pure: the environment arrives as a getter.
 
 **Parameters:**
 
-- `env` (`EnvGetter`) — `(key: string) => string | undefined`. `Deno.env.get` and
-  `(k) => process.env[k]` both fit.
+- `env` (`EnvGetter`) — `(key: string) => string | undefined`. `(k) => process.env[k]`
+  and `Deno.env.get` both fit.
 
 **Returns:** `NtfyOptions` — only the fields that were actually set. Unset and empty
 mean the same thing.
@@ -183,7 +185,7 @@ Reads: `NTFY_TOPIC`, `NTFY_SERVER`, `NTFY_TOKEN`, `NTFY_USERNAME`, `NTFY_PASSWOR
 **Example:**
 
 ```typescript
-const notify = createNtfy(optionsFromEnv(Deno.env.get));
+const notify = createNtfy(optionsFromEnv((key) => process.env[key]));
 ```
 
 ---
@@ -242,10 +244,11 @@ transport so a non-ASCII title arrives as itself rather than as `?????`.
 
 ---
 
-### `runCli(args, io?)` — Deno only
+### `runCli(args, io?)` — internal (`src/cli.ts`)
 
-The CLI as a function. Returns the exit code; never calls `Deno.exit`. Every side
-effect is injectable through `io` (`CliIo`: `out`, `err`, `env`, `readStdin`,
+The CLI as a function, behind the `mmntfy` bin and the JSR entry; not exported by either
+registry. Returns the exit code; never calls `process.exit`. Every side effect is
+injectable through `io` (`CliIo`: `out`, `err`, `env`, `readStdin`,
 `isStdinTerminal`, `readFile`, `readEnvFile`, `fetch`), which is how it is tested
 without spawning a process.
 
@@ -409,7 +412,7 @@ interface NtfyLogger {
 }
 ```
 
-`console` satisfies it, and so does a [`clog`](https://jsr.io/@marianmeres/clog)
+`console` satisfies it, and so does a [`clog`](https://www.npmjs.com/package/@marianmeres/clog)
 instance — which is the default (namespace `ntfy`). `logger: false` silences it, and
 is a deliberate choice: the return value then becomes the only trace a failed send
 leaves.

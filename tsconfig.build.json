@@ -1,0 +1,14 @@
+{
+	// `pnpm run build`: emits src/ to dist/ (ESM + .d.ts), which is all that gets published.
+	// main.ts is the JSR entry (library + `import.meta.main` CLI guard); npm uses mod.ts,
+	// sync.ts and bin.ts instead, so it is not built.
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"noEmit": false,
+		"rootDir": "src",
+		"outDir": "dist",
+		"declaration": true
+	},
+	"include": ["src"],
+	"exclude": ["src/main.ts"]
+}

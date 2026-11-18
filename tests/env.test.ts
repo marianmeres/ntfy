@@ -1,15 +1,16 @@
-import { assertEquals, assertThrows } from "@std/assert";
-import { ENV_VARS, NtfyConfigError, optionsFromEnv } from "../src/mod.ts";
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { ENV_VARS, optionsFromEnv } from "../src/mod.ts";
 
 function env(vars: Record<string, string>) {
 	return (key: string) => vars[key];
 }
 
-Deno.test("an empty environment produces empty options, not blanks", () => {
-	assertEquals(optionsFromEnv(env({})), {});
+test("an empty environment produces empty options, not blanks", () => {
+	assert.deepEqual(optionsFromEnv(env({})), {});
 });
 
-Deno.test("every documented variable is read", () => {
+test("every documented variable is read", () => {
 	const options = optionsFromEnv(env({
 		NTFY_TOPIC: "alerts",
 		NTFY_SERVER: "https://ntfy.example.com",
@@ -21,7 +22,7 @@ Deno.test("every documented variable is read", () => {
 		NTFY_CLICK: "https://example.com",
 		NTFY_TIMEOUT: "2500",
 	}));
-	assertEquals(options, {
+	assert.deepEqual(options, {
 		topic: "alerts",
 		server: "https://ntfy.example.com",
 		token: "tk_x",
@@ -34,33 +35,25 @@ Deno.test("every documented variable is read", () => {
 	});
 });
 
-Deno.test("basic auth comes from NTFY_USERNAME / NTFY_PASSWORD", () => {
+test("basic auth comes from NTFY_USERNAME / NTFY_PASSWORD", () => {
 	const options = optionsFromEnv(env({ NTFY_USERNAME: "u", NTFY_PASSWORD: "p" }));
-	assertEquals(options, { username: "u", password: "p" });
+	assert.deepEqual(options, { username: "u", password: "p" });
 });
 
-Deno.test("exported-but-empty is the same as unset", () => {
-	assertEquals(optionsFromEnv(env({ NTFY_TOPIC: "   ", NTFY_TOKEN: "" })), {});
+test("exported-but-empty is the same as unset", () => {
+	assert.deepEqual(optionsFromEnv(env({ NTFY_TOPIC: "   ", NTFY_TOKEN: "" })), {});
 });
 
-Deno.test("a numeric priority is read as a number", () => {
-	assertEquals(optionsFromEnv(env({ NTFY_PRIORITY: "5" })).priority, 5);
+test("a numeric priority is read as a number", () => {
+	assert.deepEqual(optionsFromEnv(env({ NTFY_PRIORITY: "5" })).priority, 5);
 });
 
-Deno.test("an unusable variable is a refusal at startup, not a surprise at 4am", () => {
-	assertThrows(
-		() => optionsFromEnv(env({ NTFY_PRIORITY: "loud" })),
-		NtfyConfigError,
-		"NTFY_PRIORITY",
-	);
-	assertThrows(
-		() => optionsFromEnv(env({ NTFY_TIMEOUT: "soon" })),
-		NtfyConfigError,
-		"NTFY_TIMEOUT",
-	);
+test("an unusable variable is a refusal at startup, not a surprise at 4am", () => {
+	assert.throws(() => optionsFromEnv(env({ NTFY_PRIORITY: "loud" })), { name: "NtfyConfigError", message: /NTFY_PRIORITY/ });
+	assert.throws(() => optionsFromEnv(env({ NTFY_TIMEOUT: "soon" })), { name: "NtfyConfigError", message: /NTFY_TIMEOUT/ });
 });
 
-Deno.test("ENV_VARS lists exactly what is read", () => {
-	assertEquals(ENV_VARS.length, 11);
-	assertEquals(ENV_VARS.every((v) => v.startsWith("NTFY_")), true);
+test("ENV_VARS lists exactly what is read", () => {
+	assert.deepEqual(ENV_VARS.length, 11);
+	assert.deepEqual(ENV_VARS.every((v) => v.startsWith("NTFY_")), true);
 });

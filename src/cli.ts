@@ -1,26 +1,33 @@
 /**
  * First-class CLI for `@marianmeres/ntfy`.
  *
+ * From npm it is the `mmntfy` bin (`bin.ts`); from JSR, the bare module entrypoint
+ * (`main.ts`):
+ *
  * ```bash
- * deno run -A jsr:@marianmeres/ntfy "backup finished"
+ * npx @marianmeres/ntfy "backup finished"
  * mmntfy -t "Deploy" -p 4 --tags rocket "shipped v1.2.3"
  * make build 2>&1 | mmntfy -t "Build log"
+ * deno run -A jsr:@marianmeres/ntfy "backup finished"
  * ```
  *
  * All logic lives in {@link runCli}, which takes an args array and returns an exit code (it
- * never calls `Deno.exit`), so it is testable without spawning a process. Everything external —
- * stdout/stderr, the environment, stdin, the filesystem, `fetch` — is injectable via
- * {@link CliIo}.
+ * never calls `process.exit`), so it is testable without spawning a process. Everything
+ * external — stdout/stderr, the environment, stdin, the filesystem, `fetch` — is injectable
+ * via {@link CliIo}.
  *
  * **This is the only layer that reads the ambient environment.**
  *
  * @module
  */
 
-import { parseArgs } from "@std/cli/parse-args";
-import { loadSync } from "@std/dotenv";
-import { basename } from "@std/path";
-import denoJson from "../deno.json" with { type: "json" };
+import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
+import process from "node:process";
+import { text as streamText } from "node:stream/consumers";
+import { isatty } from "node:tty";
+import { parseArgs, parseEnv } from "node:util";
 import { type EnvGetter, optionsFromEnv } from "./env.ts";
 import { ntfySend } from "./ntfy.ts";
 import {
@@ -30,9 +37,7 @@ import {
 	type NtfyRequest,
 	type NtfyTransport,
 } from "./types.ts";
-
-/** Package version, read from `deno.json` (works when published to JSR). */
-const VERSION: string = denoJson.version;
+import { VERSION } from "./version.ts";
 
 /** The name the binary is usually installed as. */
 const BIN = "mmntfy";
@@ -43,15 +48,15 @@ export interface CliIo {
 	out?: (line: string) => void;
 	/** stderr line writer. Default `console.error`. */
 	err?: (line: string) => void;
-	/** Environment getter. Default `Deno.env.get`. */
+	/** Environment getter. Default: reads `process.env`. */
 	env?: EnvGetter;
-	/** Reads all of stdin. Default: drains `Deno.stdin`. */
+	/** Reads all of stdin. Default: drains `process.stdin`. */
 	readStdin?: () => Promise<string>;
-	/** Is stdin a terminal (i.e. nothing is piped in)? Default: probes `Deno.stdin`. */
+	/** Is stdin a terminal (i.e. nothing is piped in)? Default: `isatty(0)`. */
 	isStdinTerminal?: () => boolean;
-	/** Reads an attachment. Default `Deno.readFile`. */
+	/** Reads an attachment. Default: `readFile` from `node:fs/promises`. */
 	readFile?: (path: string) => Promise<Uint8Array>;
-	/** Reads a `.env` file into a record. Default: `@std/dotenv`. */
+	/** Reads a `.env` file into a record. Default: read + `util.parseEnv`. */
 	readEnvFile?: (path: string) => Record<string, string>;
 	/** `fetch` implementation, handed to {@link ntfySend}. Default: the global one. */
 	fetch?: typeof globalThis.fetch;
@@ -194,120 +199,106 @@ function parseHeaderFlag(raw: string): [string, string] {
 	return [raw.slice(0, at).trim(), raw.slice(at + 1).trim()];
 }
 
-function toStringList(value: unknown): string[] {
-	if (value === undefined) return [];
-	return (Array.isArray(value) ? value : [value]).map((v) => String(v));
-}
-
 function resolveIo(io: CliIo): ResolvedIo {
 	return {
 		out: io.out ?? ((line) => console.log(line)),
 		err: io.err ?? ((line) => console.error(line)),
-		env: io.env ?? ((key) => Deno.env.get(key)),
-		readStdin: io.readStdin ?? (() => new Response(Deno.stdin.readable).text()),
-		isStdinTerminal: io.isStdinTerminal ?? (() => Deno.stdin.isTerminal()),
-		readFile: io.readFile ?? ((path) => Deno.readFile(path)),
+		env: io.env ?? ((key) => process.env[key]),
+		readStdin: io.readStdin ?? (() => streamText(process.stdin)),
+		// Probes fd 0 without touching `process.stdin`, which would open a handle.
+		isStdinTerminal: io.isStdinTerminal ?? (() => isatty(0)),
+		readFile: io.readFile ?? ((path) => readFile(path)),
 		readEnvFile: io.readEnvFile ?? defaultReadEnvFile,
 		fetch: io.fetch,
 	};
 }
 
+/**
+ * Read and parse a `.env` file by Node's own `--env-file` rules (`util.parseEnv`): no
+ * `${VAR}` expansion.
+ */
 function defaultReadEnvFile(path: string): Record<string, string> {
-	// `loadSync` ignores a missing file, which would turn a mistyped --env-file into a
-	// confusing "no topic" further down. A file that was asked for by name must exist.
+	// A file that was asked for by name must exist: a mistyped --env-file would otherwise
+	// surface as a confusing "no topic" further down.
+	let bytes: Uint8Array;
 	try {
-		Deno.statSync(path);
+		bytes = readFileSync(path);
 	} catch {
 		throw new NtfyConfigError(`--env-file: cannot read ${path}`);
 	}
-	return loadSync({ envPath: path, export: false });
+	// TextDecoder drops a leading BOM, which would otherwise be glued to the first key.
+	return parseEnv(new TextDecoder().decode(bytes)) as Record<string, string>;
 }
+
+/**
+ * Parse argv. Strict: an unknown option, or an option missing its value, throws — and so does
+ * a value that starts with `-` (`--title=-x` spells it out).
+ */
+function parse(args: string[]) {
+	return parseArgs({
+		args,
+		strict: true,
+		allowPositionals: true,
+		// `--no-cache`, `--no-firebase`
+		allowNegative: true,
+		options: {
+			title: { type: "string", short: "t" },
+			topic: { type: "string", short: "T" },
+			server: { type: "string", short: "s" },
+			token: { type: "string", short: "k" },
+			user: { type: "string", short: "u" },
+			password: { type: "string" },
+			priority: { type: "string", short: "p" },
+			tags: { type: "string" },
+			click: { type: "string", short: "c" },
+			markdown: { type: "boolean", short: "m" },
+			icon: { type: "string" },
+			attach: { type: "string" },
+			file: { type: "string", short: "f" },
+			filename: { type: "string" },
+			action: { type: "string", short: "a", multiple: true },
+			delay: { type: "string", short: "d" },
+			email: { type: "string", short: "e" },
+			call: { type: "string" },
+			cache: { type: "boolean" },
+			firebase: { type: "boolean" },
+			"sequence-id": { type: "string" },
+			header: { type: "string", short: "H", multiple: true },
+			transport: { type: "string" },
+			timeout: { type: "string" },
+			"env-file": { type: "string" },
+			stdin: { type: "boolean" },
+			"dry-run": { type: "boolean", short: "n" },
+			quiet: { type: "boolean", short: "q" },
+			verbose: { type: "boolean", short: "v" },
+			help: { type: "boolean", short: "h" },
+			version: { type: "boolean", short: "V" },
+		},
+	});
+}
+
+/** The parsed flags. */
+type Flags = ReturnType<typeof parse>["values"];
 
 /**
  * Run the CLI. Returns the process exit code; never exits the process itself.
  *
- * @param args Raw argv, without the executable (i.e. `Deno.args`).
+ * @param args Raw argv, without the runtime and script (i.e. `process.argv.slice(2)`).
  * @param io Injectable side effects; see {@link CliIo}.
  */
 export async function runCli(args: string[], io: CliIo = {}): Promise<number> {
 	const resolved = resolveIo(io);
 	const { out, err } = resolved;
 
-	let flags;
+	let flags: Flags;
+	let positionals: string[];
 	try {
-		flags = parseArgs(args, {
-			string: [
-				"title",
-				"topic",
-				"server",
-				"token",
-				"user",
-				"password",
-				"tags",
-				"click",
-				"icon",
-				"attach",
-				"filename",
-				"file",
-				"action",
-				"delay",
-				"email",
-				"call",
-				"sequence-id",
-				"timeout",
-				"priority",
-				"transport",
-				"env-file",
-				"header",
-			],
-			boolean: [
-				"help",
-				"version",
-				"markdown",
-				"quiet",
-				"verbose",
-				"dry-run",
-				"stdin",
-				"cache",
-				"firebase",
-			],
-			collect: ["action", "header"],
-			negatable: ["cache", "firebase"],
-			alias: {
-				h: "help",
-				V: "version",
-				t: "title",
-				p: "priority",
-				T: "topic",
-				s: "server",
-				k: "token",
-				u: "user",
-				c: "click",
-				m: "markdown",
-				f: "file",
-				a: "action",
-				d: "delay",
-				e: "email",
-				H: "header",
-				n: "dry-run",
-				q: "quiet",
-				v: "verbose",
-			},
-			default: { cache: true, firebase: true },
-			unknown: (arg) => {
-				if (arg.startsWith("-") && arg !== "-") {
-					throw new UsageError(`unknown option: ${arg}`);
-				}
-				return true;
-			},
-		});
+		({ values: flags, positionals } = parse(args));
 	} catch (e) {
-		if (e instanceof UsageError) {
-			err(e.message);
-			err(`Try \`${BIN} --help\`.`);
-			return 2;
-		}
-		throw e;
+		// node:util's own wording names the option and how to fix it.
+		err(e instanceof Error ? e.message : String(e));
+		err(`Try \`${BIN} --help\`.`);
+		return 2;
 	}
 
 	if (flags.help) {
@@ -325,7 +316,7 @@ export async function runCli(args: string[], io: CliIo = {}): Promise<number> {
 	}
 
 	try {
-		return await send(flags, resolved);
+		return await send(flags, positionals, resolved);
 	} catch (e) {
 		if (e instanceof UsageError) {
 			err(e.message);
@@ -341,13 +332,10 @@ export async function runCli(args: string[], io: CliIo = {}): Promise<number> {
 	}
 }
 
-// deno-lint-ignore no-explicit-any
-async function send(flags: any, io: ResolvedIo): Promise<number> {
-	const positional = flags._.map((v: unknown) => String(v));
-
+async function send(flags: Flags, positional: string[], io: ResolvedIo): Promise<number> {
 	let env = io.env;
 	if (flags["env-file"]) {
-		const fromFile = io.readEnvFile(String(flags["env-file"]));
+		const fromFile = io.readEnvFile(flags["env-file"]);
 		const ambient = io.env;
 		// The real environment wins: a checked-in .env is a default, not an override.
 		env = (key: string) => ambient(key) ?? fromFile[key];
@@ -369,33 +357,33 @@ async function send(flags: any, io: ResolvedIo): Promise<number> {
 	}
 	if (message !== undefined) options.message = message;
 
-	if (flags.title) options.title = String(flags.title);
-	if (flags.topic) options.topic = String(flags.topic);
-	if (flags.server) options.server = String(flags.server);
-	if (flags.token) options.token = String(flags.token);
+	if (flags.title) options.title = flags.title;
+	if (flags.topic) options.topic = flags.topic;
+	if (flags.server) options.server = flags.server;
+	if (flags.token) options.token = flags.token;
 	if (flags.user) {
-		const { username, password } = splitUser(String(flags.user));
+		const { username, password } = splitUser(flags.user);
 		options.username = username;
 		if (password !== undefined) options.password = password;
 	}
-	if (flags.password) options.password = String(flags.password);
+	if (flags.password) options.password = flags.password;
 	if (flags.priority) {
-		options.priority = String(flags.priority) as NtfyOptions["priority"];
+		options.priority = flags.priority as NtfyOptions["priority"];
 	}
-	if (flags.tags) options.tags = String(flags.tags);
-	if (flags.click) options.click = String(flags.click);
+	if (flags.tags) options.tags = flags.tags;
+	if (flags.click) options.click = flags.click;
 	if (flags.markdown) options.markdown = true;
-	if (flags.icon) options.icon = String(flags.icon);
-	if (flags.attach) options.attach = String(flags.attach);
-	if (flags.filename) options.filename = String(flags.filename);
-	if (flags.delay) options.delay = String(flags.delay);
-	if (flags.email) options.email = String(flags.email);
-	if (flags.call) options.call = String(flags.call);
+	if (flags.icon) options.icon = flags.icon;
+	if (flags.attach) options.attach = flags.attach;
+	if (flags.filename) options.filename = flags.filename;
+	if (flags.delay) options.delay = flags.delay;
+	if (flags.email) options.email = flags.email;
+	if (flags.call) options.call = flags.call;
 	if (flags.cache === false) options.cache = false;
 	if (flags.firebase === false) options.firebase = false;
-	if (flags["sequence-id"]) options.sequenceId = String(flags["sequence-id"]);
+	if (flags["sequence-id"]) options.sequenceId = flags["sequence-id"];
 	if (flags.transport) {
-		const transport = String(flags.transport);
+		const transport = flags.transport;
 		if (!["auto", "json", "body"].includes(transport)) {
 			throw new UsageError(
 				`--transport must be auto, json or body, got ${transport}`,
@@ -411,16 +399,16 @@ async function send(flags: any, io: ResolvedIo): Promise<number> {
 		options.timeout = ms;
 	}
 
-	const actions = toStringList(flags.action);
+	const actions = flags.action ?? [];
 	if (actions.length) options.actions = actions.join("; ");
 
-	const headers = toStringList(flags.header);
+	const headers = flags.header ?? [];
 	if (headers.length) {
 		options.headers = Object.fromEntries(headers.map(parseHeaderFlag));
 	}
 
 	if (flags.file) {
-		const path = String(flags.file);
+		const path = flags.file;
 		options.attachment = await io.readFile(path);
 		if (!options.filename) options.filename = basename(path);
 	}

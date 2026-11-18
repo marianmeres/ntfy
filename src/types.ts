@@ -1,8 +1,8 @@
 /**
  * Public types, constants and errors for `@marianmeres/ntfy`.
  *
- * Everything here is pure data — no I/O, no runtime globals — so it compiles for npm as
- * happily as it runs on Deno.
+ * Everything here is pure data — no I/O, no runtime globals — so it runs anywhere the core
+ * does: Node, Deno, the browser.
  *
  * @module
  */

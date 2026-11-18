@@ -3,21 +3,23 @@
  *
  * ## Why this shells out to `curl`
  *
- * `fetch` cannot be awaited from the paths that need it most. A process that dies by a
- * *synchronous* `Deno.exit()` — a refusal, a signal handler's shutdown deadline, an
- * `unload` listener — runs unload handlers and nothing asynchronous; an uncaught rejection gets
- * one turn of the event loop, not a network round trip. A subprocess under `outputSync()`
- * blocks until the POST is done, from inside any of them.
+ * `fetch` cannot be awaited from the paths that need it most. A process that ends by a
+ * *synchronous* `process.exit()` — a refusal, a signal handler's shutdown deadline, an
+ * `exit` listener — runs its exit handlers and nothing asynchronous; an uncaught exception
+ * gets no further turn of the event loop, let alone a network round trip. A subprocess under
+ * `spawnSync()` blocks until the POST is done, from inside any of them.
  *
- * The price is a dependency on `curl` and the `--allow-run` permission, which is why
- * {@link haveCurl} exists: a program configured to notify should refuse to start without it.
- * Being told at 4am that no message is coming beats inferring it from silence at 8.
+ * The price is a dependency on `curl` (and, on Deno, the `--allow-run` permission), which is
+ * why {@link haveCurl} exists: a program configured to notify should refuse to start without
+ * it. Being told at 4am that no message is coming beats inferring it from silence at 8.
  *
- * Deno only, and not part of the npm build.
+ * Needs `node:child_process`, so it is kept out of the browser-safe core (`mod.ts`): import it
+ * from `@marianmeres/ntfy/sync`. The JSR `.` entry re-exports it as well.
  *
  * @module
  */
 
+import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { createClog } from "@marianmeres/clog";
 import { buildNtfyRequest } from "./request.ts";
 import {
@@ -26,6 +28,7 @@ import {
 	NtfyError,
 	type NtfyLogger,
 	type NtfyOptions,
+	type NtfyRequest,
 	type NtfyResult,
 } from "./types.ts";
 
@@ -36,11 +39,8 @@ const defaultLogger: NtfyLogger = { warn: clog.warn, error: clog.error };
 /** Is `curl` there at all? Ask once, up front, so "no message is coming" is said in advance. */
 export function haveCurl(): boolean {
 	try {
-		return new Deno.Command("curl", {
-			args: ["--version"],
-			stdout: "null",
-			stderr: "null",
-		}).outputSync().success;
+		const result = spawnSync("curl", ["--version"], { stdio: "ignore" });
+		return !result.error && result.status === 0;
 	} catch {
 		return false;
 	}
@@ -62,17 +62,16 @@ export function haveCurl(): boolean {
  *
  * ## The token is visible in the process table
  *
- * curl's arguments are, for the life of the request. curl can only be kept from that by a
- * config file or stdin, and stdin is precisely what `outputSync()` cannot have. An ntfy token
- * is normally publish-only to one topic; if yours is worth more than that, put it in the URL's
- * `?auth=` query parameter instead — which is no better, so really: give the sender a token
- * that can only publish.
+ * curl's arguments are, for the life of the request, and this sender passes the
+ * `Authorization` header as one. An ntfy token is normally publish-only to one topic; if yours
+ * is worth more than that, put it in the URL's `?auth=` query parameter instead — which is no
+ * better, so really: give the sender a token that can only publish.
  */
 export function ntfySendSync(options: NtfyOptions | string): NtfyResult {
 	const o: NtfyOptions = typeof options === "string" ? { message: options } : options;
 	const log = o.logger === false ? null : (o.logger ?? defaultLogger);
 
-	let request;
+	let request: NtfyRequest;
 	try {
 		if (o.attachment) {
 			throw new NtfyConfigError(
@@ -111,10 +110,14 @@ export function ntfySendSync(options: NtfyOptions | string): NtfyResult {
 	}
 	args.push(request.url);
 
-	let output: Deno.CommandOutput;
+	let output: SpawnSyncReturns<string>;
 	try {
-		output = new Deno.Command("curl", { args, stdout: "piped", stderr: "piped" })
-			.outputSync();
+		output = spawnSync("curl", args, {
+			stdio: ["ignore", "pipe", "pipe"],
+			encoding: "utf8",
+		});
+		// A missing binary (ENOENT) is reported here, not thrown.
+		if (output.error) throw output.error;
 	} catch (e) {
 		const error = `could not run curl: ${e instanceof Error ? e.message : String(e)}`;
 		if (o.throwOnError) throw new NtfyError(error, { url: request.url, cause: e });
@@ -122,16 +125,17 @@ export function ntfySendSync(options: NtfyOptions | string): NtfyResult {
 		return { ok: false, status: 0, request, error };
 	}
 
-	if (output.code === 0) {
+	if (output.status === 0) {
 		return { ok: true, status: 200, request };
 	}
 
-	const decoder = new TextDecoder();
-	const said = [decoder.decode(output.stderr), decoder.decode(output.stdout)]
-		.map((s) => s.trim().split("\n")[0])
+	const said = [output.stderr, output.stdout]
+		.map((s) => (s ?? "").trim().split("\n")[0])
 		.filter(Boolean)
 		.join(" · ");
-	const error = `curl exit ${output.code}${said ? ` — ${said}` : ""}`;
+	// A curl killed by a signal has no exit status.
+	const code = output.status ?? output.signal;
+	const error = `curl exit ${code}${said ? ` — ${said}` : ""}`;
 	if (o.throwOnError) throw new NtfyError(error, { url: request.url });
 	log?.warn(`could not send to ${request.url} — ${error}`);
 	return { ok: false, status: 0, request, error };
@@ -141,7 +145,7 @@ export function ntfySendSync(options: NtfyOptions | string): NtfyResult {
  * Send one message, blocking until it is delivered or has failed. `true` if curl was happy.
  *
  * ```ts
- * globalThis.addEventListener("unload", () => {
+ * process.on("exit", () => {
  *     ntfySync({ topic: "alerts", message: "process exited", priority: 4 });
  * });
  * ```

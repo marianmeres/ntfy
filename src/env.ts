@@ -1,12 +1,12 @@
 /**
  * `NTFY_*` environment variables, turned into {@link NtfyOptions}.
  *
- * Pure: the environment arrives as an injected getter, never as `Deno.env` or `process.env`
+ * Pure: the environment arrives as an injected getter, never as `process.env` (or `Deno.env`)
  * read from under the caller. The library itself never calls this — the CLI does, and so can
  * you, explicitly:
  *
  * ```ts
- * const notify = createNtfy(optionsFromEnv(Deno.env.get));
+ * const notify = createNtfy(optionsFromEnv((key) => process.env[key]));
  * ```
  *
  * That keeps the ambient environment a decision rather than a surprise: two libraries that both
@@ -19,7 +19,7 @@
 import { normalizePriority } from "./request.ts";
 import { NtfyConfigError, type NtfyOptions } from "./types.ts";
 
-/** How an environment is read. `Deno.env.get` and `(k) => process.env[k]` both satisfy it. */
+/** How an environment is read. `(k) => process.env[k]` and `Deno.env.get` both satisfy it. */
 export type EnvGetter = (key: string) => string | undefined;
 
 /** Every variable {@link optionsFromEnv} looks at, in the order it reports them. */

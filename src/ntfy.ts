@@ -117,7 +117,7 @@ export async function ntfySend(options: NtfyOptions | string): Promise<NtfyResul
 		const response = await doFetch(request.url, {
 			method: request.method,
 			headers: request.headers,
-			body: request.body as BodyInit | undefined,
+			body: request.body as RequestInit["body"],
 			signal,
 		});
 		const text = await response.text();

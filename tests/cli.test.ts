@@ -1,4 +1,5 @@
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import { type CliIo, runCli } from "../src/cli.ts";
 
 interface Harness {
@@ -48,55 +49,55 @@ function harness(overrides: Overrides = {}): Harness {
 		out,
 		err,
 		calls,
-		body: () => JSON.parse(String(calls[0].init.body)),
-		headers: () => (calls[0].init.headers ?? {}) as Record<string, string>,
+		body: () => JSON.parse(String(calls[0]!.init.body)),
+		headers: () => (calls[0]!.init.headers ?? {}) as Record<string, string>,
 	};
 }
 
 const TOPIC_ENV = { NTFY_TOPIC: "alerts" };
 
-Deno.test("--help prints usage and exits 0", async () => {
+test("--help prints usage and exits 0", async () => {
 	const h = harness();
-	assertEquals(await runCli(["--help"], h.io), 0);
-	assertStringIncludes(h.out.join("\n"), "Usage:");
-	assertEquals(h.calls.length, 0);
+	assert.deepEqual(await runCli(["--help"], h.io), 0);
+	assert.match(h.out.join("\n"), /Usage:/);
+	assert.deepEqual(h.calls.length, 0);
 });
 
-Deno.test("the bare command prints help rather than an error", async () => {
+test("the bare command prints help rather than an error", async () => {
 	const h = harness();
-	assertEquals(await runCli([], h.io), 0);
-	assertStringIncludes(h.out.join("\n"), "Usage:");
+	assert.deepEqual(await runCli([], h.io), 0);
+	assert.match(h.out.join("\n"), /Usage:/);
 });
 
-Deno.test("--version prints just the version", async () => {
+test("--version prints just the version", async () => {
 	const h = harness();
-	assertEquals(await runCli(["--version"], h.io), 0);
-	assertEquals(h.out.length, 1);
-	assertStringIncludes(h.out[0], ".");
+	assert.deepEqual(await runCli(["--version"], h.io), 0);
+	assert.deepEqual(h.out.length, 1);
+	assert.match(h.out[0] ?? "", /\./);
 });
 
-Deno.test("a message plus NTFY_TOPIC is all it takes", async () => {
+test("a message plus NTFY_TOPIC is all it takes", async () => {
 	const h = harness({ env: TOPIC_ENV });
-	assertEquals(await runCli(["backup finished"], h.io), 0);
-	assertEquals(h.calls[0].url, "https://ntfy.sh/");
-	assertEquals(h.body(), { topic: "alerts", message: "backup finished" });
-	assertStringIncludes(h.out.join("\n"), "sent to https://ntfy.sh/");
-	assertStringIncludes(h.out.join("\n"), "abc123");
+	assert.deepEqual(await runCli(["backup finished"], h.io), 0);
+	assert.deepEqual(h.calls[0]!.url, "https://ntfy.sh/");
+	assert.deepEqual(h.body(), { topic: "alerts", message: "backup finished" });
+	assert.match(h.out.join("\n"), /sent to https:\/\/ntfy\.sh\//);
+	assert.match(h.out.join("\n"), /abc123/);
 });
 
-Deno.test("positional arguments are joined with spaces", async () => {
+test("positional arguments are joined with spaces", async () => {
 	const h = harness({ env: TOPIC_ENV });
 	await runCli(["backup", "finished", "at", "4am"], h.io);
-	assertEquals(h.body().message, "backup finished at 4am");
+	assert.deepEqual(h.body().message, "backup finished at 4am");
 });
 
-Deno.test("flags override the environment", async () => {
+test("flags override the environment", async () => {
 	const h = harness({ env: { NTFY_TOPIC: "alerts", NTFY_PRIORITY: "1" } });
 	await runCli(["-T", "urgent", "-p", "5", "hi"], h.io);
-	assertEquals(h.body(), { topic: "urgent", message: "hi", priority: 5 });
+	assert.deepEqual(h.body(), { topic: "urgent", message: "hi", priority: 5 });
 });
 
-Deno.test("every message flag reaches the payload", async () => {
+test("every message flag reaches the payload", async () => {
 	const h = harness({ env: TOPIC_ENV });
 	await runCli([
 		"-t",
@@ -120,7 +121,7 @@ Deno.test("every message flag reaches the payload", async () => {
 		"seq-1",
 		"shipped v1.2.3",
 	], h.io);
-	assertEquals(h.body(), {
+	assert.deepEqual(h.body(), {
 		topic: "alerts",
 		message: "shipped v1.2.3",
 		title: "Deploy",
@@ -136,31 +137,31 @@ Deno.test("every message flag reaches the payload", async () => {
 	});
 });
 
-Deno.test("--no-cache and --no-firebase are negations, not values", async () => {
+test("--no-cache and --no-firebase are negations, not values", async () => {
 	const h = harness({ env: TOPIC_ENV });
 	await runCli(["--no-cache", "--no-firebase", "hi"], h.io);
-	assertEquals(h.body().cache, "no");
-	assertEquals(h.body().firebase, "no");
+	assert.deepEqual(h.body().cache, "no");
+	assert.deepEqual(h.body().firebase, "no");
 });
 
-Deno.test("cache and firebase are left alone by default", async () => {
+test("cache and firebase are left alone by default", async () => {
 	const h = harness({ env: TOPIC_ENV });
 	await runCli(["hi"], h.io);
-	assertEquals(h.body().cache, undefined);
-	assertEquals(h.body().firebase, undefined);
+	assert.deepEqual(h.body().cache, undefined);
+	assert.deepEqual(h.body().firebase, undefined);
 });
 
-Deno.test("-k becomes a Bearer token, -u becomes basic auth", async () => {
+test("-k becomes a Bearer token, -u becomes basic auth", async () => {
 	const h1 = harness({ env: TOPIC_ENV });
 	await runCli(["-k", "tk_secret", "hi"], h1.io);
-	assertEquals(h1.headers()["Authorization"], "Bearer tk_secret");
+	assert.deepEqual(h1.headers()["Authorization"], "Bearer tk_secret");
 
 	const h2 = harness({ env: TOPIC_ENV });
 	await runCli(["-u", "alice:s3cret", "hi"], h2.io);
-	assertEquals(h2.headers()["Authorization"], `Basic ${btoa("alice:s3cret")}`);
+	assert.deepEqual(h2.headers()["Authorization"], `Basic ${btoa("alice:s3cret")}`);
 });
 
-Deno.test("repeated --action flags become one short-format string on the body transport", async () => {
+test("repeated --action flags become one short-format string on the body transport", async () => {
 	const h = harness({ env: TOPIC_ENV });
 	await runCli([
 		"-a",
@@ -169,32 +170,32 @@ Deno.test("repeated --action flags become one short-format string on the body tr
 		"http, Retry, https://ci.example.com/retry, method=POST",
 		"build failed",
 	], h.io);
-	assertEquals(h.calls[0].url, "https://ntfy.sh/alerts");
-	assertEquals(String(h.calls[0].init.body), "build failed");
-	assertEquals(
+	assert.deepEqual(h.calls[0]!.url, "https://ntfy.sh/alerts");
+	assert.deepEqual(String(h.calls[0]!.init.body), "build failed");
+	assert.deepEqual(
 		h.headers()["X-Actions"],
 		"view, Logs, https://ci.example.com/logs; http, Retry, https://ci.example.com/retry, method=POST",
 	);
 });
 
-Deno.test("piped stdin becomes the message", async () => {
+test("piped stdin becomes the message", async () => {
 	const h = harness({
 		env: TOPIC_ENV,
 		isStdinTerminal: () => false,
 		readStdin: () => Promise.resolve("line one\nline two\n"),
 	});
-	assertEquals(await runCli([], h.io), 0);
-	assertEquals(h.body().message, "line one\nline two");
+	assert.deepEqual(await runCli([], h.io), 0);
+	assert.deepEqual(h.body().message, "line one\nline two");
 });
 
-Deno.test("typed arguments win over a pipe unless --stdin says otherwise", async () => {
+test("typed arguments win over a pipe unless --stdin says otherwise", async () => {
 	const typed = harness({
 		env: TOPIC_ENV,
 		isStdinTerminal: () => false,
 		readStdin: () => Promise.resolve("piped"),
 	});
 	await runCli(["typed"], typed.io);
-	assertEquals(typed.body().message, "typed");
+	assert.deepEqual(typed.body().message, "typed");
 
 	const forced = harness({
 		env: TOPIC_ENV,
@@ -202,57 +203,57 @@ Deno.test("typed arguments win over a pipe unless --stdin says otherwise", async
 		readStdin: () => Promise.resolve("piped"),
 	});
 	await runCli(["--stdin", "typed"], forced.io);
-	assertEquals(forced.body().message, "piped");
+	assert.deepEqual(forced.body().message, "piped");
 });
 
-Deno.test("a piped log over 4 KB is sent as an attachment, not rejected", async () => {
+test("a piped log over 4 KB is sent as an attachment, not rejected", async () => {
 	const long = "x".repeat(5000);
 	const h = harness({
 		env: TOPIC_ENV,
 		isStdinTerminal: () => false,
 		readStdin: () => Promise.resolve(long),
 	});
-	assertEquals(await runCli([], h.io), 0);
-	assertEquals(h.calls[0].url, "https://ntfy.sh/alerts");
-	assertEquals(String(h.calls[0].init.body).length, 5000);
+	assert.deepEqual(await runCli([], h.io), 0);
+	assert.deepEqual(h.calls[0]!.url, "https://ntfy.sh/alerts");
+	assert.deepEqual(String(h.calls[0]!.init.body).length, 5000);
 });
 
-Deno.test("--file uploads the bytes and names the attachment after the file", async () => {
+test("--file uploads the bytes and names the attachment after the file", async () => {
 	const h = harness({
 		env: TOPIC_ENV,
 		readFile: () => Promise.resolve(new Uint8Array([1, 2, 3])),
 	});
-	assertEquals(await runCli(["-f", "/tmp/shot.png", "look"], h.io), 0);
-	assertEquals(h.calls[0].init.method, "PUT");
-	assertEquals(h.headers()["X-Filename"], "shot.png");
-	assertEquals(h.headers()["X-Message"], "look");
+	assert.deepEqual(await runCli(["-f", "/tmp/shot.png", "look"], h.io), 0);
+	assert.deepEqual(h.calls[0]!.init.method, "PUT");
+	assert.deepEqual(h.headers()["X-Filename"], "shot.png");
+	assert.deepEqual(h.headers()["X-Message"], "look");
 });
 
-Deno.test("--dry-run prints the request and sends nothing", async () => {
+test("--dry-run prints the request and sends nothing", async () => {
 	const h = harness({ env: TOPIC_ENV });
-	assertEquals(await runCli(["-n", "hi"], h.io), 0);
-	assertEquals(h.calls.length, 0);
+	assert.deepEqual(await runCli(["-n", "hi"], h.io), 0);
+	assert.deepEqual(h.calls.length, 0);
 	const printed = h.out.join("\n");
-	assertStringIncludes(printed, "nothing was sent");
-	assertStringIncludes(printed, "POST https://ntfy.sh/");
-	assertStringIncludes(printed, '"message":"hi"');
+	assert.match(printed, /nothing was sent/);
+	assert.match(printed, /POST https:\/\/ntfy\.sh\//);
+	assert.match(printed, /"message":"hi"/);
 });
 
-Deno.test("--dry-run redacts the token it prints", async () => {
+test("--dry-run redacts the token it prints", async () => {
 	const h = harness({ env: TOPIC_ENV });
 	await runCli(["-n", "-k", "tk_secret_value_here", "hi"], h.io);
 	const printed = h.out.join("\n");
-	assertStringIncludes(printed, "redacted");
-	assertEquals(printed.includes("tk_secret_value_here"), false);
+	assert.match(printed, /redacted/);
+	assert.deepEqual(printed.includes("tk_secret_value_here"), false);
 });
 
-Deno.test("-q says nothing on success", async () => {
+test("-q says nothing on success", async () => {
 	const h = harness({ env: TOPIC_ENV });
-	assertEquals(await runCli(["-q", "hi"], h.io), 0);
-	assertEquals(h.out, []);
+	assert.deepEqual(await runCli(["-q", "hi"], h.io), 0);
+	assert.deepEqual(h.out, []);
 });
 
-Deno.test("a refused message exits 1 and says why", async () => {
+test("a refused message exits 1 and says why", async () => {
 	const h = harness({ env: TOPIC_ENV });
 	h.io.fetch = (() =>
 		Promise.resolve(
@@ -261,66 +262,98 @@ Deno.test("a refused message exits 1 and says why", async () => {
 			}),
 		)) as unknown as typeof globalThis.fetch;
 
-	assertEquals(await runCli(["hi"], h.io), 1);
-	assertStringIncludes(h.err.join("\n"), "HTTP 403");
-	assertStringIncludes(h.err.join("\n"), "forbidden");
+	assert.deepEqual(await runCli(["hi"], h.io), 1);
+	assert.match(h.err.join("\n"), /HTTP 403/);
+	assert.match(h.err.join("\n"), /forbidden/);
 });
 
-Deno.test("a missing topic exits 2, before anything is sent", async () => {
+test("a missing topic exits 2, before anything is sent", async () => {
 	const h = harness();
-	assertEquals(await runCli(["hi"], h.io), 2);
-	assertEquals(h.calls.length, 0);
-	assertStringIncludes(h.err.join("\n"), "no topic");
+	assert.deepEqual(await runCli(["hi"], h.io), 2);
+	assert.deepEqual(h.calls.length, 0);
+	assert.match(h.err.join("\n"), /no topic/);
 });
 
-Deno.test("an unknown option exits 2 and points at --help", async () => {
+test("an unknown option exits 2 and points at --help", async () => {
 	const h = harness({ env: TOPIC_ENV });
-	assertEquals(await runCli(["--nope", "hi"], h.io), 2);
-	assertStringIncludes(h.err.join("\n"), "unknown option: --nope");
-	assertStringIncludes(h.err.join("\n"), "--help");
+	assert.deepEqual(await runCli(["--nope", "hi"], h.io), 2);
+	assert.match(h.err.join("\n"), /Unknown option '--nope'/);
+	assert.match(h.err.join("\n"), /--help/);
+	assert.deepEqual(h.calls.length, 0);
 });
 
-Deno.test("nothing to send exits 2", async () => {
+test("an option missing its value exits 2 instead of sending without it", async () => {
 	const h = harness({ env: TOPIC_ENV });
-	assertEquals(await runCli(["-t", "title only"], h.io), 2);
-	assertStringIncludes(h.err.join("\n"), "nothing to send");
+	assert.deepEqual(await runCli(["hi", "-t"], h.io), 2);
+	assert.match(h.err.join("\n"), /'-t, --title <value>' argument missing/);
+	assert.deepEqual(h.calls.length, 0);
 });
 
-Deno.test("a bad --priority is a configuration refusal, not a send", async () => {
+test("a value that starts with a dash has to be spelled with =", async () => {
+	const ambiguous = harness({ env: TOPIC_ENV });
+	assert.deepEqual(await runCli(["-t", "-5 degrees", "hi"], ambiguous.io), 2);
+	assert.match(ambiguous.err.join("\n"), /--title=-XYZ/);
+	assert.deepEqual(ambiguous.calls.length, 0);
+
+	const spelled = harness({ env: TOPIC_ENV });
+	assert.deepEqual(await runCli(["--title=-5 degrees", "hi"], spelled.io), 0);
+	assert.deepEqual(spelled.body().title, "-5 degrees");
+});
+
+test("short flags combine, and a short option takes an attached value", async () => {
 	const h = harness({ env: TOPIC_ENV });
-	assertEquals(await runCli(["-p", "loud", "hi"], h.io), 2);
-	assertEquals(h.calls.length, 0);
+	assert.deepEqual(await runCli(["-mq", "-p4", "hi"], h.io), 0);
+	assert.deepEqual(h.body(), { topic: "alerts", message: "hi", priority: 4, markdown: true });
+	assert.deepEqual(h.out, []);
 });
 
-Deno.test("--env-file supplies defaults that the real environment overrides", async () => {
+test("arguments after -- are message words, even when they look like options", async () => {
+	const h = harness({ env: TOPIC_ENV });
+	assert.deepEqual(await runCli(["--", "-5", "degrees", "007"], h.io), 0);
+	assert.deepEqual(h.body().message, "-5 degrees 007");
+});
+
+test("nothing to send exits 2", async () => {
+	const h = harness({ env: TOPIC_ENV });
+	assert.deepEqual(await runCli(["-t", "title only"], h.io), 2);
+	assert.match(h.err.join("\n"), /nothing to send/);
+});
+
+test("a bad --priority is a configuration refusal, not a send", async () => {
+	const h = harness({ env: TOPIC_ENV });
+	assert.deepEqual(await runCli(["-p", "loud", "hi"], h.io), 2);
+	assert.deepEqual(h.calls.length, 0);
+});
+
+test("--env-file supplies defaults that the real environment overrides", async () => {
 	const h = harness({
 		env: { NTFY_TOKEN: "from-env" },
 		readEnvFile: () => ({ NTFY_TOPIC: "from-file", NTFY_TOKEN: "from-file" }),
 	});
-	assertEquals(await runCli(["--env-file", "/tmp/.env", "hi"], h.io), 0);
-	assertEquals(h.body().topic, "from-file");
-	assertEquals(h.headers()["Authorization"], "Bearer from-env");
+	assert.deepEqual(await runCli(["--env-file", "/tmp/.env", "hi"], h.io), 0);
+	assert.deepEqual(h.body().topic, "from-file");
+	assert.deepEqual(h.headers()["Authorization"], "Bearer from-env");
 });
 
-Deno.test("-H adds a raw header", async () => {
+test("-H adds a raw header", async () => {
 	const h = harness({ env: TOPIC_ENV });
 	await runCli(["-H", "X-Poll-ID: abc", "hi"], h.io);
-	assertEquals(h.headers()["X-Poll-ID"], "abc");
+	assert.deepEqual(h.headers()["X-Poll-ID"], "abc");
 });
 
-Deno.test("--verbose prints the request and the reply", async () => {
+test("--verbose prints the request and the reply", async () => {
 	const h = harness({ env: TOPIC_ENV });
 	await runCli(["-v", "hi"], h.io);
 	const printed = h.out.join("\n");
-	assertStringIncludes(printed, "POST https://ntfy.sh/");
-	assertStringIncludes(printed, '"id": "abc123"');
+	assert.match(printed, /POST https:\/\/ntfy\.sh\//);
+	assert.match(printed, /"id": "abc123"/);
 });
 
-Deno.test("a missing --env-file is a named refusal, not a confusing 'no topic'", async () => {
+test("a missing --env-file is a named refusal, not a confusing 'no topic'", async () => {
 	const h = harness({ env: TOPIC_ENV });
 	// The default reader is used here on purpose: the check lives in it.
 	delete (h.io as { readEnvFile?: unknown }).readEnvFile;
-	assertEquals(await runCli(["--env-file", "/nope/does/not/exist.env", "hi"], h.io), 2);
-	assertStringIncludes(h.err.join("\n"), "--env-file");
-	assertEquals(h.calls.length, 0);
+	assert.deepEqual(await runCli(["--env-file", "/nope/does/not/exist.env", "hi"], h.io), 2);
+	assert.match(h.err.join("\n"), /--env-file/);
+	assert.deepEqual(h.calls.length, 0);
 });

@@ -6,18 +6,25 @@ default. Library + CLI. **Publish only — this package does not subscribe.**
 
 ## Quick Reference
 
-- **Runtime:** Deno. **JSR:** core + `ntfySync` + CLI. **npm:** core only.
-- **JSR `exports` / CLI entry:** `src/main.ts` (re-exports `mod.ts` + `sync.ts`,
-  `import.meta.main` guard runs `cli.ts`).
-- **npm `.` entry:** `src/mod.ts` — no Deno globals, no `@std/*` (compiled by plain
-  `tsc` via `@marianmeres/npmbuild`).
+- **Stack:** TypeScript (erasable-only), Node LTS (`.node-version`), pnpm, `node:test`,
+  Biome. Runtime policy: Node at the keyboard and in production, npm as the registry; no
+  `Deno.*` / `Bun.*`, no `jsr:` / `npm:` specifiers in source.
+- **npm** (`package.json`, manifest of record; built by `tsc -p tsconfig.build.json`):
+  `.` → `src/mod.ts` (browser-safe core), `./sync` → `src/sync.ts`, bin `mmntfy` →
+  `src/bin.ts`.
+- **JSR** (`jsr.json`, kept for the Deno consumers): `.` → `src/main.ts` (re-exports
+  `mod.ts` + `sync.ts`; its `import.meta.main` guard runs `cli.ts`), `./sync` →
+  `src/sync.ts`. No version field: `publish:jsr` passes the `package.json` one.
 - **CLI binary:** `mmntfy` — deliberately **not** `ntfy`, which is ntfy's own Go CLI.
-- **Test:** `deno task test` (`deno test -A`; offline — `fetch` is injected, and the
-  curl path talks to a subprocess server on loopback).
-- **Check / Lint / Format:** `deno task check` | `deno task lint` | `deno fmt`.
-- **Try it (dry):** `deno task cli -n -T alerts "hello"` — `-n` builds and prints the
+- **Install:** `pnpm install` | **Test:** `pnpm test` (offline — `fetch` is injected,
+  the curl path and the e2e CLI talk to a subprocess server on loopback) |
+  **Check all:** `pnpm run ci` (typecheck + Biome + tests + npm smoke) |
+  **Format:** `pnpm run format`.
+- **Deno side:** `pnpm run test:deno` runs the same suite on Deno (`CLI_RUNTIME=deno`
+  starts the CLI from `src/main.ts`); `pnpm run jsr:check` is a publish dry run.
+- **Try it (dry):** `pnpm run cli -n -T alerts "hello"` — `-n` builds and prints the
   request, sends nothing, needs no credentials.
-- **Try it (live):** `deno task send "hello"` — loads `.env` (gitignored; see
+- **Try it (live):** `pnpm run send "hello"` — loads `.env` (gitignored; see
   [.env.example](./.env.example)) and **really sends**. Add `-n` to rehearse it first.
   Verify what the server stored with
   `curl -s "https://ntfy.sh/<topic>/json?poll=1" | tail -1`.
@@ -38,11 +45,12 @@ argv ──parseArgs──▶ NtfyOptions ────────────�
   `buildNtfyRequest` is the only place options become a request, and the only place
   anything is validated — which is what makes `dryRun` a complete pre-flight rather
   than a partial one.
-- **I/O layer:** `ntfy.ts` (async `fetch`), `sync.ts` (Deno-only, blocking `curl`).
-- **Deno layer:** `cli.ts` (`runCli(args, io)` — all side effects injectable via
-  `CliIo`), `main.ts`.
-- **Deps:** `@marianmeres/clog` (failure logging), `@std/cli` + `@std/dotenv` +
-  `@std/path` (CLI only).
+- **I/O layer:** `ntfy.ts` (async `fetch`), `sync.ts` (blocking `curl` via
+  `node:child_process` `spawnSync`; not browser-safe, hence its own export).
+- **CLI layer:** `cli.ts` (`runCli(args, io)` — all side effects injectable via
+  `CliIo`; defaults use `node:util` `parseArgs`/`parseEnv`, `node:fs`, `node:tty`),
+  entered through `bin.ts` (npm) or `main.ts` (JSR).
+- **Deps:** `@marianmeres/clog` (failure logging) — the only runtime dependency.
 
 ## Project Structure
 
@@ -52,21 +60,30 @@ src/
   target.ts    resolveTarget / jsonUrl / topicUrl — the four target spellings
   request.ts   buildNtfyRequest + normalize*/encodeHeaderValue; ALL validation
   ntfy.ts      ntfySend, ntfy, createNtfy, createNtfySend, mergeOptions
-  sync.ts      Deno: ntfySendSync, ntfySync, haveCurl (curl subprocess)
+  sync.ts      ntfySendSync, ntfySync, haveCurl (curl subprocess)   → npm/JSR ./sync
   env.ts       optionsFromEnv(EnvGetter), ENV_VARS
-  cli.ts       Deno: runCli — the ONLY layer that reads the ambient environment
-  mod.ts       npm entry (core)        main.ts   JSR entry (core + sync + CLI guard)
+  cli.ts       runCli — the ONLY layer that reads the ambient environment
+  version.ts   VERSION for --version; written from package.json on release
+  mod.ts       npm "." (core)   bin.ts  npm bin   main.ts  JSR "." (core + sync + CLI guard)
 tests/
   *.test.ts            one per module; cli.test.ts injects the whole of CliIo
-  _assert-server.ts    subprocess HTTP server that asserts on what it receives,
-                       used by sync.test.ts (ntfySync blocks the event loop, so the
-                       receiving server cannot live in the same isolate)
+  cli.e2e.test.ts      spawns the real CLI (bin.ts; main.ts on Deno) — real env, stdin,
+                       files, fetch against the assert server
+  version.test.ts      src/version.ts agrees with package.json
+  _assert-server.ts    subprocess HTTP server that asserts on what it receives
+                       (ntfySync blocks the event loop, so the receiving server cannot
+                       live in the same process)
+  _runtime.ts          starts subprocesses on Node, or on Deno under CLI_RUNTIME=deno
+scripts/
+  smoke-npm.ts         packs + installs the tarball, runs the bin, imports both exports,
+                       fails if the "." graph imports any node:* builtin (part of ci)
+  sync-version.ts      package.json version → src/version.ts (release --before-commit)
 ```
 
 ## Critical Conventions
 
 1. **The library reads no environment.** `NTFY_*` is the CLI's vocabulary. In code,
-   the caller opts in: `createNtfy(optionsFromEnv(Deno.env.get))`. Do not add an
+   the caller opts in: `createNtfy(optionsFromEnv((k) => process.env[k]))`. Do not add an
    ambient read to `ntfy()` — two libraries that both read `NTFY_TOPIC` on their own
    cannot be told apart when the wrong phone buzzes.
 2. **Validate in `request.ts`, nowhere else.** Anything ntfy would reject with a 400
@@ -82,8 +99,9 @@ tests/
 5. **Transport is derived, not guessed.** `auto` picks `body` only for the three cases
    JSON publishing cannot carry (upload, short-format actions, message > 4,096 bytes).
    An explicit `transport: "json"` turns each of those into a named refusal.
-6. **`runCli` never calls `Deno.exit`.** It returns an exit code; `main.ts` exits.
-   Every side effect goes through `CliIo`.
+6. **`runCli` never calls `process.exit`.** It returns an exit code; `bin.ts` /
+   `main.ts` set `process.exitCode`, so stdout is flushed. Every side effect goes through
+   `CliIo`.
 7. **Secrets are redacted in anything printed** (`--dry-run`, `--verbose`): the
    `Authorization` header and any `?auth=` query parameter.
 
@@ -103,6 +121,17 @@ tests/
 - Limits enforced locally: message 4,096 bytes, title 1 KB, all tags 512 bytes,
   3 actions, topic `[-_A-Za-z0-9]{1,64}`.
 
+## CLI Parsing Notes
+
+- `node:util` `parseArgs`, strict: an unknown option, an option missing its value, or a
+  value starting with `-` (`-t -5`) exits 2 with Node's own message; `--title=-5` and
+  `-- -5 degrees` are the escapes. `allowNegative` gives `--no-cache` / `--no-firebase`.
+- `--env-file` is parsed by `util.parseEnv` (Node's `--env-file` rules: no `${VAR}`
+  expansion); a leading BOM is dropped.
+- **Node trap:** Node scans the _script's_ arguments for `--env-file` too. It never loads
+  such a file, but a missing one makes Node exit **9** (`node: x.env: not found`) before
+  the CLI runs; Deno reaches the CLI's own exit 2. `tests/cli.e2e.test.ts` accepts both.
+
 ## Before Making Changes
 
 - [ ] Adding a publish field? `types.ts` → `normalize()` → **both** `buildJsonRequest`
@@ -111,9 +140,12 @@ tests/
 - [ ] Verify any ntfy behaviour against
       `https://raw.githubusercontent.com/binwiederhier/ntfy/main/server/server.go`
       (`parsePublishParams`, `transformBodyJSON`) — the published docs are incomplete.
-- [ ] `deno task check && deno task lint && deno task test && deno fmt`.
-- [ ] Keep `src/mod.ts`'s graph free of Deno globals and `@std/*`, and keep
-      `scripts/build-npm.ts`'s `sourceFiles` in sync with it.
+- [ ] `pnpm run format`, then `pnpm run ci`. Touching `sync.ts`, `cli.ts` or `main.ts`?
+      Also `pnpm run test:deno` — Deno consumers import the JSR build.
+- [ ] Keep `src/mod.ts`'s graph free of `node:*` imports (the smoke test fails on one);
+      anything that needs a builtin goes in a separate export, like `./sync`.
+- [ ] Releasing is a human action: `pnpm run rp` / `rpm` (bump via
+      `@marianmeres/release`, sync `src/version.ts`, then npm + JSR publish).
 
 ## Documentation Index
 

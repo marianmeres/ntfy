@@ -29,28 +29,29 @@ mmntfy "backup finished"
   a file or pipe in a log over ntfy's 4 KB text limit — which ntfy then turns into an
   attachment instead of rejecting.
 - **Sends from an exit handler.** `ntfySync()` blocks via `curl`, so a message still
-  goes out from a synchronous `Deno.exit()` where `fetch` can never be awaited.
+  goes out from a synchronous `process.exit()` where `fetch` can never be awaited.
 - **The library reads no environment.** `NTFY_*` belongs to the CLI; in code you pass
   options, or hand the environment in yourself.
-- Library **and** CLI. Deno, Node and the browser.
+- Library **and** CLI. The core runs on Node, Deno and in the browser.
 
 ## Installation
 
 ```bash
-# Run the CLI with no install
+npm install @marianmeres/ntfy        # the library (and the mmntfy command, in node_modules/.bin)
+npm install -g @marianmeres/ntfy     # mmntfy as a global command
+npx @marianmeres/ntfy --help         # the CLI with no install
+```
+
+On Deno, from JSR:
+
+```bash
+deno add jsr:@marianmeres/ntfy
 deno run -A jsr:@marianmeres/ntfy --help
-
-# Or install it as a command
 deno install -gA -n mmntfy jsr:@marianmeres/ntfy
-
-# As a library
-deno add jsr:@marianmeres/ntfy     # Deno: core + ntfySync + CLI
-npm install @marianmeres/ntfy      # npm: runtime-agnostic core only
 ```
 
 The command is called `mmntfy`, not `ntfy`, so it never shadows
-[ntfy's own CLI](https://docs.ntfy.sh/install/). Name it whatever you like with
-`-n`.
+[ntfy's own CLI](https://docs.ntfy.sh/install/).
 
 ## Usage
 
@@ -97,22 +98,25 @@ A failure is reported, never thrown — unless you ask:
 await ntfy({ topic: "alerts", message: "hi", throwOnError: true }); // throws NtfyError
 ```
 
-### From an exit handler (Deno)
+### From an exit handler
 
-`fetch` cannot be awaited from a synchronous `Deno.exit()`, an `unload` listener or a
+`fetch` cannot be awaited from a synchronous `process.exit()`, an `exit` listener or a
 signal handler's shutdown deadline. `ntfySync` shells out to `curl` and blocks, so a
 message still goes out from all three:
 
 ```ts
-import { haveCurl, ntfySync } from "@marianmeres/ntfy";
+import { haveCurl, ntfySync } from "@marianmeres/ntfy/sync";
 
 // Say "no message is coming" up front, not by silence at 4am.
 if (!haveCurl()) throw new Error("notifications configured, but curl is missing");
 
-globalThis.addEventListener("unload", () => {
+process.on("exit", () => {
 	ntfySync({ topic: "alerts", message: "process exited", priority: 4 });
 });
 ```
+
+It is a separate import because it needs `node:child_process`; the main one stays
+browser-safe.
 
 ## CLI
 
@@ -154,10 +158,11 @@ case becomes `mmntfy "message"`:
 | `NTFY_TIMEOUT`                    | `--timeout`        | Milliseconds, default `10000`            |
 
 Flags beat the environment; the real environment beats a file given with
-`--env-file`. See [.env.example](.env.example).
+`--env-file`. See [.env.example](.env.example). (On Node, a `--env-file` that does not
+exist is refused by Node itself, with exit code 9, before the command starts.)
 
-Working on this package? `deno task send "hello"` reads a local (gitignored) `.env`
-and really sends; `deno task cli -n "hello"` builds the request and prints it without
+Working on this package? `pnpm run send "hello"` reads a local (gitignored) `.env`
+and really sends; `pnpm run cli -n "hello"` builds the request and prints it without
 sending anything.
 
 In code, nothing is ambient — but you can opt in explicitly:
@@ -165,7 +170,7 @@ In code, nothing is ambient — but you can opt in explicitly:
 ```ts
 import { createNtfy, optionsFromEnv } from "@marianmeres/ntfy";
 
-const notify = createNtfy(optionsFromEnv(Deno.env.get));
+const notify = createNtfy(optionsFromEnv((key) => process.env[key]));
 ```
 
 ## API
